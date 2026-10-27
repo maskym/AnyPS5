@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 CHECK = re.compile(r"^//(Have (include|includes|function|symbol|library) |Test |Result of (TRY_COMPILE|TRY_RUN|TEST_BIG_ENDIAN|check_)|CHECK_TYPE_SIZE: )")
-ENTRY = re.compile(r"^([^#/:][^:]*):([A-Z]+)=(.*)$")
+ENTRY = re.compile(r'^(?:"([^"]*)"|([^#/:"][^:]*)):([A-Z]+)=(.*)$')
 
 
 def checks(cache):
@@ -15,9 +15,10 @@ def checks(cache):
             doc.append(line)
             continue
         match = ENTRY.match(line)
-        if match and match.group(2) == "INTERNAL" and doc and CHECK.match(doc[0]):
+        if match and match.group(3) == "INTERNAL" and doc and CHECK.match(doc[0]):
             help_text = "".join("\n" + line[4:] if line.startswith("//\\n") else line[2:] for line in doc)
-            found[match.group(1)] = (match.group(3), help_text)
+            name = match.group(1) if match.group(1) is not None else match.group(2)
+            found[name] = (match.group(4), help_text)
         doc = []
     architecture_sizes = {name for name, (value, doc) in found.items()
                           if value == "0" and doc.startswith("CHECK_TYPE_SIZE: ")}

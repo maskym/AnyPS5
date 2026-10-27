@@ -220,6 +220,32 @@ class ConfigureSeedRoundTripTests(ConfigureSeedProject):
         self.assertEqual(configure_seed.checks(seeded)["HAVE FEATURE"][0], "1")
         self.assertNotIn("HAVE:INTERNAL=", seeded.read_text(encoding="utf-8"))
 
+    def test_quoted_check_names_round_trip_through_cmake(self):
+        cache = self.root / "quoted-check.txt"
+        cache.write_text('//Test A:B\n"A:B":INTERNAL=1\n//Test PLAIN\nPLAIN:INTERNAL=1\n', encoding="utf-8")
+        self.assertEqual({name: value for name, (value, doc) in configure_seed.checks(cache).items()},
+                         {"A:B": "1", "PLAIN": "1"})
+        output = self.configure_cache_only("quoted-check", "-C", str(self.seed(cache, "quoted-check.cmake")))
+        self.assertNotRegex(output, r"CMake Error")
+        seeded = (self.root / "quoted-check" / "CMakeCache.txt").read_text(encoding="utf-8")
+        self.assertIn('"A:B":INTERNAL=1', seeded)
+        self.assertEqual(configure_seed.checks(self.root / "quoted-check" / "CMakeCache.txt")["A:B"][0], "1")
+
+    def test_seeded_quoted_check_is_not_performed_again(self):
+        source = self.root / "colon-check-source"
+        source.mkdir()
+        (source / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.20)\nproject(colon_check C)\ninclude(CheckCSourceCompiles)\n"
+            'check_c_source_compiles("int main(void) { return 0; }" "A:B")\n', encoding="utf-8")
+        configure = lambda name, *extra: subprocess.run(
+            ["cmake", *extra, "-S", str(source), "-B", str(self.root / name), "-G", "Ninja"],
+            check=True, capture_output=True, text=True).stdout
+        self.assertIn("Performing Test A:B", configure("colon-fresh"))
+        seed = self.seed(self.root / "colon-fresh" / "CMakeCache.txt", "colon.cmake")
+        self.assertIn('set("A:B" "1"', seed.read_text(encoding="utf-8"))
+        self.assertNotIn("Performing Test A:B", configure("colon-seeded", "-C", str(seed)))
+        self.assertEqual(configure_seed.checks(self.root / "colon-seeded" / "CMakeCache.txt")["A:B"][0], "1")
+
     def test_seeded_configure_runs_no_check_and_gets_the_same_results(self):
         self.assertRegex(self.fresh, r"Looking for|Performing Test|Check size of")
         output = self.configure("seeded", "-C", str(self.seed(self.root / "fresh" / "CMakeCache.txt", "seed.cmake")))

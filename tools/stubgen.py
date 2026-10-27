@@ -177,9 +177,26 @@ def generate(module, nids, db, td_path=None, td_lib=None):
     return (code, td_text)
 
 
+def case_insensitive(path):
+    path = Path(path)
+    while not path.exists():
+        if path.parent == path:
+            return False
+        path = path.parent
+    swapped = Path(str(path).swapcase())
+    if swapped == path:
+        return os.name == "nt"
+    return swapped.exists() and os.path.samefile(swapped, path)
+
+
 def same_file(left, right):
     left, right = Path(left), Path(right)
-    return left.resolve() == right.resolve() or (left.exists() and right.exists() and left.samefile(right))
+    if left.exists() and right.exists() and left.samefile(right):
+        return True
+    left, right = left.resolve(), right.resolve()
+    if left == right:
+        return True
+    return str(left).casefold() == str(right).casefold() and case_insensitive(left) and case_insensitive(right)
 
 
 def write_outputs(outputs):

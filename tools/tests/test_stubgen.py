@@ -224,6 +224,45 @@ class StubGeneratorTests(unittest.TestCase):
             self.assertEqual(error.exception.code, 2)
             self.assertFalse(output.exists())
 
+    def assert_case_aliased_outputs(self, root, code, debt):
+        nids = root / "nids.txt"
+        nids.write_text("AAAAAAAAAAA\n", encoding="utf-8")
+        arguments = ["--module", "libSceExample", "--nids", str(nids), "--out", str(code), "--td-out", str(debt)]
+        if stubgen.case_insensitive(root):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                stubgen.main(arguments)
+            self.assertEqual(error.exception.code, 2)
+            self.assertFalse((root / "REPORT.TXT").exists() or (root / "report.txt").exists())
+        else:
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(stubgen.main(arguments), 0)
+            self.assertIn("NotImplemented_nid_no_patch", (root / "REPORT.TXT").read_text(encoding="utf-8"))
+            self.assertNotIn("NotImplemented_nid_no_patch", (root / "report.txt").read_text(encoding="utf-8"))
+
+    def test_outputs_differing_only_by_case_are_rejected_on_a_case_insensitive_filesystem(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assert_case_aliased_outputs(root, root / "REPORT.TXT", root / "report.txt")
+
+    def test_dangling_symlink_to_a_case_alias_is_rejected_on_a_case_insensitive_filesystem(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            try:
+                os.symlink("REPORT.TXT", root / "code-link.txt")
+            except (OSError, NotImplementedError) as error:
+                self.skipTest(f"symbolic links are unavailable: {error}")
+            self.assert_case_aliased_outputs(root, root / "code-link.txt", root / "report.txt")
+
+    def test_same_file_compares_case_only_on_case_insensitive_filesystems(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(stubgen, "case_insensitive", return_value=True):
+                self.assertTrue(stubgen.same_file(root / "A.txt", root / "a.txt"))
+                self.assertFalse(stubgen.same_file(root / "a.txt", root / "b.txt"))
+            if os.name != "nt":
+                with patch.object(stubgen, "case_insensitive", return_value=False):
+                    self.assertFalse(stubgen.same_file(root / "A.txt", root / "a.txt"))
+
     def test_valid_annotations_comments_and_duplicates_are_preserved(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "nids.txt"

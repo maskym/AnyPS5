@@ -101,6 +101,55 @@ struct LibreSsl3Rsa {
     void* multiThreadBlinding;
 };
 
+struct LibreSsl3SslSessionPrefix {
+    std::int32_t sslVersion;
+    std::size_t masterKeyLength;
+    unsigned char masterKey[48];
+    std::size_t sessionIdLength;
+    unsigned char sessionId[32];
+    std::size_t sessionIdContextLength;
+    unsigned char sessionIdContext[32];
+    void* peerCertificate;
+    std::int32_t peerCertificateType;
+    std::int64_t verifyResult;
+    std::int64_t timeout;
+    std::int64_t time;
+    std::int32_t references;
+};
+
+struct LibreSsl3SslContextPrefix {
+    const void* method;
+    const void* quicMethod;
+    void* cipherList;
+    void* certificateStore;
+    std::int64_t sessionTimeout;
+    std::int32_t references;
+};
+
+struct LibreSsl3SslPrefix {
+    std::int32_t version;
+    const void* method;
+    const void* quicMethod;
+    void* readBio;
+    void* writeBio;
+    void* bufferBio;
+    std::int32_t server;
+    void* ssl3State;
+    void* dtls1State;
+    void* parameters;
+    void* cipherList;
+    void* certificate;
+    std::size_t sessionIdContextLength;
+    unsigned char sessionIdContext[32];
+    void* session;
+    std::int32_t verifyMode;
+    std::int32_t error;
+    std::int32_t errorCode;
+    void* context;
+    std::int64_t verifyResult;
+    std::int32_t references;
+};
+
 static_assert(sizeof(LibreSsl3EvpPkey) == 32);
 static_assert(offsetof(LibreSsl3EvpPkey, references) == 4);
 static_assert(sizeof(LibreSsl3EcKey) == 64);
@@ -113,3 +162,6 @@ static_assert(sizeof(LibreSsl3X509Store) == 64);
 static_assert(offsetof(LibreSsl3X509Store, references) == 56);
 static_assert(sizeof(LibreSsl3Rsa) == 152);
 static_assert(offsetof(LibreSsl3Rsa, references) == 104);
+static_assert(offsetof(LibreSsl3SslSessionPrefix, references) == 184);
+static_assert(offsetof(LibreSsl3SslContextPrefix, references) == 40);
+static_assert(offsetof(LibreSsl3SslPrefix, references) == 176);

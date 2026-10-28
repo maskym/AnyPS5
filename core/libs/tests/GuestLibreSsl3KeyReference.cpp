@@ -72,5 +72,11 @@ int main(int argc, char** argv) {
         CheckKey<LibreSsl3X509Store>(X509_STORE_up_ref_nid_postfix, 56);
     if (argc == 1 || std::strcmp(argv[1], "rsa") == 0)
         CheckKey<LibreSsl3Rsa>(RSA_up_ref_nid_postfix, 104);
+    if (argc == 1 || std::strcmp(argv[1], "ssl") == 0)
+        CheckKey<LibreSsl3SslPrefix>(SSL_up_ref_nid_postfix, 176);
+    if (argc == 1 || std::strcmp(argv[1], "context") == 0)
+        CheckKey<LibreSsl3SslContextPrefix>(SSL_CTX_up_ref_nid_postfix, 40);
+    if (argc == 1 || std::strcmp(argv[1], "session") == 0)
+        CheckKey<LibreSsl3SslSessionPrefix>(SSL_SESSION_up_ref_nid_postfix, 184);
     return 0;
 }

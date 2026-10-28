@@ -64,5 +64,13 @@ int main(int argc, char** argv) {
         CheckKey<LibreSsl3EvpPkey>(EVP_PKEY_up_ref_nid_postfix, 4);
     if (argc == 1 || std::strcmp(argv[1], "ec") == 0)
         CheckKey<LibreSsl3EcKey>(EC_KEY_up_ref_nid_postfix, 48);
+    if (argc == 1 || std::strcmp(argv[1], "bio") == 0)
+        CheckKey<LibreSsl3Bio>(BIO_up_ref_nid_postfix, 80);
+    if (argc == 1 || std::strcmp(argv[1], "x509") == 0)
+        CheckKey<LibreSsl3X509>(X509_up_ref_nid_postfix, 28);
+    if (argc == 1 || std::strcmp(argv[1], "store") == 0)
+        CheckKey<LibreSsl3X509Store>(X509_STORE_up_ref_nid_postfix, 56);
+    if (argc == 1 || std::strcmp(argv[1], "rsa") == 0)
+        CheckKey<LibreSsl3Rsa>(RSA_up_ref_nid_postfix, 104);
     return 0;
 }

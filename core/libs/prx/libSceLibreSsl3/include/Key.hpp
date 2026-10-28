@@ -24,7 +24,92 @@ struct LibreSsl3EcKey {
     void* extraData;
 };
 
+struct LibreSsl3Bio {
+    const void* method;
+    void* callback;
+    void* callbackEx;
+    char* callbackArgument;
+    std::int32_t init;
+    std::int32_t shutdown;
+    std::int32_t flags;
+    std::int32_t retryReason;
+    std::int32_t num;
+    void* pointer;
+    LibreSsl3Bio* next;
+    LibreSsl3Bio* previous;
+    std::int32_t references;
+    std::uint64_t bytesRead;
+    std::uint64_t bytesWritten;
+    void* extraData;
+};
+
+struct LibreSsl3X509 {
+    void* certificateInfo;
+    void* signatureAlgorithm;
+    void* signature;
+    std::int32_t valid;
+    std::int32_t references;
+    char* name;
+    void* extraData;
+    std::int64_t pathLength;
+    std::uint64_t flags;
+    std::uint64_t keyUsage;
+    std::uint64_t extendedKeyUsage;
+    std::uint64_t netscapeCertificateType;
+    void* subjectKeyIdentifier;
+    void* authorityKeyIdentifier;
+    void* crlDistributionPoints;
+    void* alternativeNames;
+    void* nameConstraints;
+    void* rfc3779Addresses;
+    void* rfc3779AsIdentifiers;
+    unsigned char hash[64];
+    void* auxiliary;
+};
+
+struct LibreSsl3X509Store {
+    void* objects;
+    void* lookupMethods;
+    void* parameters;
+    void* verify;
+    void* verifyCallback;
+    void* checkIssued;
+    void* extraData;
+    std::int32_t references;
+};
+
+struct LibreSsl3Rsa {
+    std::int32_t pad;
+    std::int64_t version;
+    const void* method;
+    void* n;
+    void* e;
+    void* d;
+    void* p;
+    void* q;
+    void* dmp1;
+    void* dmq1;
+    void* iqmp;
+    void* pssParameters;
+    void* extraData;
+    std::int32_t references;
+    std::int32_t flags;
+    void* montgomeryN;
+    void* montgomeryP;
+    void* montgomeryQ;
+    void* blinding;
+    void* multiThreadBlinding;
+};
+
 static_assert(sizeof(LibreSsl3EvpPkey) == 32);
 static_assert(offsetof(LibreSsl3EvpPkey, references) == 4);
 static_assert(sizeof(LibreSsl3EcKey) == 64);
 static_assert(offsetof(LibreSsl3EcKey, references) == 48);
+static_assert(sizeof(LibreSsl3Bio) == 112);
+static_assert(offsetof(LibreSsl3Bio, references) == 80);
+static_assert(sizeof(LibreSsl3X509) == 216);
+static_assert(offsetof(LibreSsl3X509, references) == 28);
+static_assert(sizeof(LibreSsl3X509Store) == 64);
+static_assert(offsetof(LibreSsl3X509Store, references) == 56);
+static_assert(sizeof(LibreSsl3Rsa) == 152);
+static_assert(offsetof(LibreSsl3Rsa, references) == 104);

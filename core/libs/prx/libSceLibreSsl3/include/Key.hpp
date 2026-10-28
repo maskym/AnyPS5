@@ -43,8 +43,24 @@ struct LibreSsl3Bio {
     void* extraData;
 };
 
+struct LibreSsl3X509CertificateInfo {
+    void* version;
+    void* serialNumber;
+    void* signature;
+    void* issuer;
+    void* validity;
+    void* subject;
+    void* key;
+    void* issuerUniqueId;
+    void* subjectUniqueId;
+    void* extensions;
+    unsigned char* encoding;
+    std::int64_t encodingLength;
+    std::int32_t encodingModified;
+};
+
 struct LibreSsl3X509 {
-    void* certificateInfo;
+    LibreSsl3X509CertificateInfo* certificateInfo;
     void* signatureAlgorithm;
     void* signature;
     std::int32_t valid;

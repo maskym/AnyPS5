@@ -79,7 +79,7 @@ int APS5_VABI X509_get0_notBefore_nid_postfix(void);
 int APS5_VABI X509_get0_signature_nid_postfix(void);
 int APS5_VABI X509_get_ext_nid_postfix(void);
 int APS5_VABI X509_get_ext_count_nid_postfix(void);
-int APS5_VABI X509_get_version_nid_postfix(void);
+std::int64_t APS5_VABI X509_get_version_nid_postfix(const LibreSsl3X509* certificate);
 int APS5_VABI X509_getm_notAfter_nid_postfix(void);
 int APS5_VABI X509_getm_notBefore_nid_postfix(void);
 int APS5_VABI X509_up_ref_nid_postfix(LibreSsl3X509* certificate);

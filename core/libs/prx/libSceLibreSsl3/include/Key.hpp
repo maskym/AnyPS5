@@ -117,13 +117,32 @@ struct LibreSsl3SslSessionPrefix {
     std::int32_t references;
 };
 
+struct LibreSsl3SslMethodPrefix {
+    std::int32_t dtls;
+    std::int32_t server;
+    std::int32_t version;
+    std::uint16_t minTlsVersion;
+    std::uint16_t maxTlsVersion;
+};
+
 struct LibreSsl3SslContextPrefix {
-    const void* method;
+    const LibreSsl3SslMethodPrefix* method;
     const void* quicMethod;
     void* cipherList;
     void* certificateStore;
     std::int64_t sessionTimeout;
     std::int32_t references;
+    void* extraCertificates;
+    std::int32_t verifyMode;
+    std::size_t sessionIdContextLength;
+    unsigned char sessionIdContext[32];
+    void* parameters;
+    void* defaultPasswordCallback;
+    void* defaultPasswordCallbackData;
+    std::uint16_t minTlsVersion;
+    std::uint16_t maxTlsVersion;
+    std::uint16_t minProtoVersion;
+    std::uint16_t maxProtoVersion;
 };
 
 struct LibreSsl3SslPrefix {
@@ -164,4 +183,8 @@ static_assert(sizeof(LibreSsl3Rsa) == 152);
 static_assert(offsetof(LibreSsl3Rsa, references) == 104);
 static_assert(offsetof(LibreSsl3SslSessionPrefix, references) == 184);
 static_assert(offsetof(LibreSsl3SslContextPrefix, references) == 40);
+static_assert(offsetof(LibreSsl3SslContextPrefix, minTlsVersion) == 128);
+static_assert(offsetof(LibreSsl3SslContextPrefix, maxProtoVersion) == 134);
+static_assert(offsetof(LibreSsl3SslMethodPrefix, minTlsVersion) == 12);
+static_assert(offsetof(LibreSsl3SslMethodPrefix, maxTlsVersion) == 14);
 static_assert(offsetof(LibreSsl3SslPrefix, references) == 176);

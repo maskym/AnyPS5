@@ -24,6 +24,7 @@ extern "C" {
 
 int APS5_VABI JoinThread_nid_no_patch(Pthread thread, void** retval, const KernelTimespec* abstime);
 bool IsInitialPthread_nid_no_patch();
+Pthread InitialPthread_nid_no_patch();
 
 }
 
@@ -193,7 +194,8 @@ static Pthread SchedTarget(int pid, const char* function) {
     if (pid == 0) return scePthreadSelf();
     if (pid != getpid_nid_postfix()) return nullptr;
     if (IsInitialPthread_nid_no_patch()) return scePthreadSelf();
-    throw std::runtime_error(std::string(function) + ": the main thread is selected by the own pid from another thread, which is not modelled");
+    if (const Pthread initial = InitialPthread_nid_no_patch()) return initial;
+    throw std::runtime_error(std::string(function) + ": the own pid selects the initial thread, which has not entered the thread library on this host");
 }
 
 static int SchedFailure(int error) {

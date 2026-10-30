@@ -136,6 +136,30 @@ static void CheckOutOfRange() {
 }
 
 #ifndef __APPLE__
+struct OwnPidWorker {
+    int mainPriority = -1;
+    int mainPolicy = -1;
+    int setResult = -1;
+    int ownPriority = -1;
+};
+
+static void* APS5_VABI OwnPidWorkerEntry(void* arg) {
+    auto& worker = *static_cast<OwnPidWorker*>(arg);
+    const KernelSchedParam own{500};
+    REQUIRE(sched_setparam_nid_postfix(0, &own) == 0);
+    const int self = getpid_nid_postfix();
+    KernelSchedParam param{-1};
+    REQUIRE(sched_getparam_nid_postfix(self, &param) == 0);
+    worker.mainPriority = param.sched_priority;
+    worker.mainPolicy = sched_getscheduler_nid_postfix(self);
+    const KernelSchedParam raised{650};
+    worker.setResult = sched_setparam_nid_postfix(self, &raised);
+    KernelSchedParam after{-1};
+    REQUIRE(sched_getparam_nid_postfix(0, &after) == 0);
+    worker.ownPriority = after.sched_priority;
+    return nullptr;
+}
+
 static void CheckOwnPid() {
     KernelSchedParam original{};
     REQUIRE(sched_getparam_nid_postfix(0, &original) == 0);
@@ -146,7 +170,15 @@ static void CheckOwnPid() {
     KernelSchedParam reported{-1};
     REQUIRE(sched_getparam_nid_postfix(self, &reported) == 0 && reported.sched_priority == 600);
     REQUIRE(sched_getscheduler_nid_postfix(self) == policy);
+    OwnPidWorker worker;
+    Pthread thread = nullptr;
+    REQUIRE(scePthreadCreate(&thread, nullptr, OwnPidWorkerEntry, &worker, "ownpid") == 0);
+    REQUIRE(scePthreadJoin(thread, nullptr) == 0);
+    REQUIRE(worker.mainPriority == 600 && worker.mainPolicy == policy && worker.setResult == 0 && worker.ownPriority == 500);
+    REQUIRE(sched_getparam_nid_postfix(0, &reported) == 0 && reported.sched_priority == 650);
+    REQUIRE(sched_getparam_nid_postfix(self, &reported) == 0 && reported.sched_priority == 650);
     REQUIRE(sched_setparam_nid_postfix(self, &original) == 0);
+    REQUIRE(sched_getparam_nid_postfix(0, &reported) == 0 && reported.sched_priority == original.sched_priority);
 }
 #endif
 

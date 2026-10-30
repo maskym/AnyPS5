@@ -52,6 +52,18 @@ extern "C" bool IsInitialPthread_nid_no_patch() {
 #endif
 }
 
+static std::atomic<PthreadPrivate*> initialPthread{nullptr};
+
+static void RecordInitialPthread(PthreadPrivate* thread) {
+#ifndef __APPLE__
+    if (IsInitialPthread_nid_no_patch()) initialPthread.store(thread, std::memory_order_release);
+#endif
+}
+
+extern "C" Pthread InitialPthread_nid_no_patch() {
+    return initialPthread.load(std::memory_order_acquire);
+}
+
 static constexpr int SCE_OK = 0;
 static constexpr std::size_t GUEST_THREAD_NAME_CAPACITY = 32;
 static constexpr int GUEST_EINVAL = 22;
@@ -1185,6 +1197,7 @@ Pthread APS5_VABI scePthreadSelf() {
         TimedWait::BindThreadWaitState(&adopted->waitCount);
         SetStackFromHost(adopted.get());
         CurrentGuestState().current = adopted.release();
+        RecordInitialPthread(CurrentGuestState().current);
     }
 #else
     if (!CurrentGuestState().current) {
@@ -1196,6 +1209,7 @@ Pthread APS5_VABI scePthreadSelf() {
         adoptedThread->hostThread = pthread_self();
         SetStackFromHost(adoptedThread.get());
         CurrentGuestState().current = adoptedThread.get();
+        RecordInitialPthread(adoptedThread.get());
     }
 #endif
     return CurrentGuestState().current;

@@ -5,6 +5,7 @@
 #include "prx/libkernel/System/include/UserContext.hpp"
 #include "prx/libc/include/FileStream.hpp"
 #include "SceTypes.hpp"
+#include "prx/libc/include/Api.hpp"
 #include <cstddef>
 
 using ErrExit = void (APS5_VABI*)(int);
@@ -108,6 +109,10 @@ int APS5_VABI _Mtxunlock_nid_postfix(PthreadMutex* mutex);
 int APS5_VABI _Mtxdst_nid_postfix(PthreadMutex* mutex);
 void* APS5_VABI sceLibcInternalAlignedArrayNewNothrow_nid_no_patch(std::size_t size, std::size_t alignment, const void* tag) noexcept;
 void APS5_VABI sceLibcInternalAlignedArrayDelete_nid_no_patch(void* pointer, std::size_t alignment);
+void APS5_VABI sceLibcInternalOverflowErrorDelete_nid_no_patch(LibcException::ExceptionObject* self);
+void APS5_VABI sceLibcInternalUnderflowErrorDelete_nid_no_patch(LibcException::ExceptionObject* self);
+void APS5_VABI sceLibcInternalPlacementDelete_nid_no_patch(void* pointer, void* place);
+void APS5_VABI sceLibcInternalPlacementArrayDelete_nid_no_patch(void* pointer, void* place);
 
 int APS5_VABI sceLibcMspaceSetMallocCallback();
 int APS5_VABI sceLibcPafMspaceReportMemoryBlocks();

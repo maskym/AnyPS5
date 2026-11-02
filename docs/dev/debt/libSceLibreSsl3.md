@@ -30,7 +30,7 @@
 
 ### Additional callable export inventory
 
-- [Additional exports](../../../core/libs/prx/libSceLibreSsl3/AdditionalExports.cpp) declare 176 callable exports: 50 named and 126 known only by NID. Every entry throws. Parameterless `int` declarations are unknown-signature placeholders, not verified ABI contracts. Names/NIDs match the 13.60 export table. No functional implementation or title unblock is claimed.
+- [Additional exports](../../../core/libs/prx/libSceLibreSsl3/AdditionalExports.cpp) declare 173 callable exports: 47 named and 126 known only by NID. Every entry throws. Parameterless `int` declarations are unknown-signature placeholders, not verified ABI contracts. Names/NIDs match the 13.60 export table. No functional implementation or title unblock is claimed.
 
 | Name | NID |
 | --- | --- |
@@ -38,9 +38,7 @@
 | `BIO_set_init` | `+STC2BUY9vY` |
 | `EC_POINT_get_affine_coordinates_GFp` | `+Tu0gXSas9s` |
 | `tls_config_set_cert_mem` | `+bQfpiUHRVk` |
-| `SSL_SESSION_get_protocol_version` | `0BW+8jTsY54` |
 | `X509_NAME_add_entry_by_txt` | `0IxWzLyU8PI` |
-| `SSL_SESSION_get_timeout` | `0JcHkrKJ9iw` |
 | `BIO_meth_free` | `13BHMSblVyY` |
 | `tls_handshake` | `27Fuliv3Om8` |
 | `AUTHORITY_KEYID_free` | `2bIZM-OfE8Y` |
@@ -130,7 +128,6 @@
 | `X509_STORE_load_locations` | `V3JtebYui1A` |
 | `ERR_func_error_string` | `VXuysR7ySzw` |
 | `EVP_get_digestbyname` | `Wm24hhTLqWM` |
-| `SSL_SESSION_set_time` | `XG3hIzt9VXY` |
 | `X509_set_issuer_name` | `XK3FmaTS6pg` |
 | `HMAC_CTX_free` | `YAxGqtnKQFY` |
 | `X509_add_ext` | `YJ7bfxMHniE` |

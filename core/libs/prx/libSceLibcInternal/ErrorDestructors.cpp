@@ -15,6 +15,9 @@ void APS5_VABI sceLibcInternalUnderflowErrorDelete_nid_no_patch(LibcException::E
 }
 APS5_EXPORT("iHILAmwYRGY", sceLibcInternalUnderflowErrorDelete_nid_no_patch);
 
+void APS5_VABI sceLibcInternalFutureCategoryDestroy_nid_no_patch(LibcException::CategoryObject*) {}
+APS5_EXPORT("xsXQD5ybREw", sceLibcInternalFutureCategoryDestroy_nid_no_patch);
+
 void APS5_VABI sceLibcInternalPlacementDelete_nid_no_patch(void*, void*) {}
 APS5_EXPORT("1vo6qqqa9F4", sceLibcInternalPlacementDelete_nid_no_patch);
 

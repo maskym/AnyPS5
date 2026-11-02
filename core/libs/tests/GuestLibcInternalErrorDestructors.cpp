@@ -62,14 +62,20 @@ int main() {
     sceLibcInternalUnderflowErrorDelete_nid_no_patch(MakeError("a message long enough to be kept on the heap rather than in place"));
     Require(allocations == 0 && releases == 0, "the deleting destructors use the host allocator, not the application heap");
 
+    const LibcException::CategoryObject* future = _ZSt15future_categoryv_nid_postfix();
+    const void* const futureVtable = future->vtable;
+    LibcException::CategoryObject copy{futureVtable};
+    sceLibcInternalFutureCategoryDestroy_nid_no_patch(&copy);
+    Require(copy.vtable == futureVtable && future->vtable == futureVtable && allocations == 0 && releases == 0, "the future category destructor leaves the object and the heap untouched");
+
     std::array<std::byte, 16> block{};
     block.fill(std::byte{0x5a});
-    const auto copy = block;
+    const auto blockCopy = block;
     sceLibcInternalPlacementDelete_nid_no_patch(block.data(), storage.data());
     sceLibcInternalPlacementArrayDelete_nid_no_patch(block.data(), storage.data());
     sceLibcInternalPlacementDelete_nid_no_patch(nullptr, nullptr);
     sceLibcInternalPlacementArrayDelete_nid_no_patch(nullptr, nullptr);
-    Require(block == copy && releases == 0 && allocations == 0, "the placement deletes touch nothing");
+    Require(block == blockCopy && releases == 0 && allocations == 0, "the placement deletes touch nothing");
 
     std::puts("libc internal error destructor checks passed");
     return 0;

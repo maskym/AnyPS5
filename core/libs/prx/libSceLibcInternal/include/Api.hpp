@@ -111,6 +111,7 @@ void* APS5_VABI sceLibcInternalAlignedArrayNewNothrow_nid_no_patch(std::size_t s
 void APS5_VABI sceLibcInternalAlignedArrayDelete_nid_no_patch(void* pointer, std::size_t alignment);
 void APS5_VABI sceLibcInternalOverflowErrorDelete_nid_no_patch(LibcException::ExceptionObject* self);
 void APS5_VABI sceLibcInternalUnderflowErrorDelete_nid_no_patch(LibcException::ExceptionObject* self);
+void APS5_VABI sceLibcInternalFutureCategoryDestroy_nid_no_patch(LibcException::CategoryObject* self);
 void APS5_VABI sceLibcInternalPlacementDelete_nid_no_patch(void* pointer, void* place);
 void APS5_VABI sceLibcInternalPlacementArrayDelete_nid_no_patch(void* pointer, void* place);
 

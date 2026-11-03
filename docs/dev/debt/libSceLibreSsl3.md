@@ -28,7 +28,7 @@
 
 ### Additional callable export inventory
 
-- [Additional exports](../../../core/libs/prx/libSceLibreSsl3/AdditionalExports.cpp) declare 175 callable exports: 165 named and 10 known only by NID. Every entry throws. Parameterless `int` declarations are unknown-signature placeholders, not verified ABI contracts. Names/NIDs match the 13.60 export table. No functional implementation or title unblock is claimed.
+- [Additional exports](../../../core/libs/prx/libSceLibreSsl3/AdditionalExports.cpp) declare 174 callable exports: 164 named and 10 known only by NID. Every entry throws. Parameterless `int` declarations are unknown-signature placeholders, not verified ABI contracts. Names/NIDs match the 13.60 export table. No functional implementation or title unblock is claimed.
 
 | Name | NID |
 | --- | --- |
@@ -103,7 +103,6 @@
 | `ERR_load_PEM_strings` | `M7ze0mz2jQM` |
 | `tls_error` | `N+G3Gxequt0` |
 | `OpenSSL_add_all_digests` | `O9Thca3enw8` |
-| `EVP_PKEY_base_id` | `OqtHJ7QUZg8` |
 | `unknown` | `PBYz0kpXwg8` |
 | `X509_new` | `PNfwr3s6dEs` |
 | `RSA_get0_factors` | `PcUZS7XHwHk` |

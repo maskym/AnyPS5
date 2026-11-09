@@ -132,9 +132,8 @@ void APS5_VABI sceLibcInternalUnknown6_026_U4JPmRpm70c_nid_no_patch(void* self) 
 }
 APS5_EXPORT("U4JP-R+-70c", sceLibcInternalUnknown6_026_U4JPmRpm70c_nid_no_patch);
 
-int APS5_VABI _ZNSt22_Future_error_categoryD1Ev_nid_postfix() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+void APS5_VABI _ZNSt22_Future_error_categoryD1Ev_nid_postfix(void* self) {
+    _ZNSt14error_categoryD2Ev_nid_postfix(static_cast<LibcException::CategoryObject*>(self));
 }
 
 int APS5_VABI sceLibcInternalUnknown6_028_fIskTFX9p68_nid_no_patch() {

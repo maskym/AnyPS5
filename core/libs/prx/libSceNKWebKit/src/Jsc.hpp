@@ -150,6 +150,7 @@ struct OpaqueJSContext {
     std::unordered_map<OpaqueJSClass*, OpaqueJSValue*> classPrototypes;
     OpaqueJSValue* unhandledRejectionCallback = nullptr;
     std::vector<std::pair<JSValue, JSValue>> pendingUnhandledRejections;
+    std::vector<OpaqueJSWeakObjectMap*> weakMaps;
     std::string name;
     bool hasName = false;
     bool remoteInspectionEnabled = true;

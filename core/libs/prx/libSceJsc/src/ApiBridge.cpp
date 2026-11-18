@@ -2,6 +2,7 @@
 #include "prx/libc/include/General.hpp"
 
 #include <atomic>
+#include <stdexcept>
 
 namespace {
 
@@ -29,6 +30,16 @@ const void* APS5_VABI JSValueMakeString(const void* context, const GuestJSString
 bool APS5_VABI JSObjectHasPropertyForKey(const void* context, const void* object, const void* key, const void** exception) {
     if (!context) return false;
     return Bridge(__func__).hasPropertyForKey(context, object, key, exception);
+}
+
+void* APS5_VABI JSWeakObjectMapCreate(const void* context, void* privateData, Jsc::WeakObjectMapDestroyedCallback callback) {
+    if (!context) throw std::invalid_argument("JSWeakObjectMapCreate: null context");
+    if (!callback) throw std::invalid_argument("JSWeakObjectMapCreate: null destroyed callback");
+    return Bridge(__func__).weakObjectMapCreate(context, privateData, callback);
+}
+
+bool APS5_VABI JSWeakObjectMapClear(const void*, void*, void*, const void*) {
+    return true;
 }
 
 }

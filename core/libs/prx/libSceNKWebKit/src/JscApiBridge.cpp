@@ -40,7 +40,18 @@ bool HasPropertyForKey(const void* context, const void* objectRef, const void* k
     return result != 0;
 }
 
-constexpr Jsc::ApiBridge bridge{&MakeString, &HasPropertyForKey};
+void* WeakObjectMapCreate(const void* context, void* privateData, Jsc::WeakObjectMapDestroyedCallback callback) {
+    auto* ctx = Context(context);
+    auto* map = new OpaqueJSWeakObjectMap();
+    map->group = ctx->group;
+    map->privateData = privateData;
+    map->destroyedCallback = reinterpret_cast<JSWeakMapDestroyedCallback>(callback);
+    ctx->group->weakMaps.push_back(map);
+    ctx->weakMaps.push_back(map);
+    return map;
+}
+
+constexpr Jsc::ApiBridge bridge{&MakeString, &HasPropertyForKey, &WeakObjectMapCreate};
 const bool bridgeRegistered = (RegisterApiBridge_nid_no_patch(&bridge), true);
 
 }

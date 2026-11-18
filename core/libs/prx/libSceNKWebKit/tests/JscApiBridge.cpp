@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 
 using namespace NKWebKit;
 
@@ -121,6 +122,100 @@ void TestHasPropertyForKey(JSGlobalContextRef ctx) {
     Require(!HasPropertyForKey(ctx, object, nullptr, nullptr));
 }
 
+struct MapDestroyedState {
+    void* map = nullptr;
+    void* data = nullptr;
+    int calls = 0;
+};
+
+void APS5_VABI MapDestroyed(void* map, void* data) {
+    auto* state = static_cast<MapDestroyedState*>(data);
+    state->map = map;
+    state->data = data;
+    ++state->calls;
+}
+
+JSWeakObjectMapRef AsMap(void* map) {
+    return static_cast<JSWeakObjectMapRef>(map);
+}
+
+void TestWeakObjectMap() {
+    JSGlobalContextRef ctx = JSGlobalContextCreate(nullptr);
+    Require(ctx != nullptr);
+
+    MapDestroyedState state;
+    void* map = JSWeakObjectMapCreate(ctx, &state, &MapDestroyed);
+    Require(map != nullptr);
+    MapDestroyedState otherState;
+    void* other = JSWeakObjectMapCreate(ctx, &otherState, &MapDestroyed);
+    Require(other != nullptr && other != map);
+
+    JSObjectRef object = JSObjectMake(ctx, nullptr, nullptr);
+    JSValueProtect(ctx, object);
+    int key = 0;
+    int otherKey = 0;
+    JSWeakObjectMapSet(ctx, AsMap(map), &key, object);
+    Require(JSWeakObjectMapGet(ctx, AsMap(map), &key) == object);
+    Require(JSWeakObjectMapGet(ctx, AsMap(map), &otherKey) == nullptr);
+    Require(JSWeakObjectMapGet(ctx, AsMap(other), &key) == nullptr);
+
+    Require(JSWeakObjectMapClear(ctx, map, &key, object));
+    Require(JSWeakObjectMapGet(ctx, AsMap(map), &key) == object);
+    Require(JSWeakObjectMapClear(nullptr, nullptr, nullptr, nullptr));
+
+    JSValueUnprotect(ctx, object);
+    JSSynchronousGarbageCollectForDebugging(ctx);
+    Require(JSWeakObjectMapGet(ctx, AsMap(map), &key) == nullptr);
+
+    bool threw = false;
+    try {
+        JSWeakObjectMapCreate(nullptr, &state, &MapDestroyed);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    Require(threw);
+    threw = false;
+    try {
+        JSWeakObjectMapCreate(ctx, &state, nullptr);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    Require(threw);
+
+    Require(state.calls == 0 && otherState.calls == 0);
+    JSGlobalContextRelease(ctx);
+    Require(state.calls == 1 && state.map == map && state.data == &state);
+    Require(otherState.calls == 1 && otherState.map == other && otherState.data == &otherState);
+}
+
+void TestWeakObjectMapPerContext() {
+    JSGlobalContextRef ctx = JSGlobalContextCreate(nullptr);
+    Require(ctx != nullptr);
+    JSGlobalContextRef shortLived = JSGlobalContextCreateInGroup(JSContextGetGroup(ctx), nullptr);
+    Require(shortLived != nullptr);
+    MapDestroyedState kept;
+    MapDestroyedState released;
+    void* keptMap = JSWeakObjectMapCreate(ctx, &kept, &MapDestroyed);
+    void* releasedMap = JSWeakObjectMapCreate(shortLived, &released, &MapDestroyed);
+    Require(keptMap != nullptr && releasedMap != nullptr);
+    JSGlobalContextRelease(shortLived);
+    Require(released.calls == 1 && released.map == releasedMap && released.data == &released);
+    Require(kept.calls == 0);
+
+    JSObjectRef object = JSObjectMake(ctx, nullptr, nullptr);
+    JSValueProtect(ctx, object);
+    int key = 0;
+    JSWeakObjectMapSet(ctx, AsMap(keptMap), &key, object);
+    Require(JSWeakObjectMapGet(ctx, AsMap(keptMap), &key) == object);
+    JSGarbageCollect(ctx);
+    Require(JSWeakObjectMapGet(ctx, AsMap(keptMap), &key) == object);
+    JSValueUnprotect(ctx, object);
+
+    JSGlobalContextRelease(ctx);
+    Require(kept.calls == 1 && kept.map == keptMap && kept.data == &kept);
+    Require(released.calls == 1);
+}
+
 }
 
 int main() {
@@ -128,6 +223,8 @@ int main() {
     Require(ctx != nullptr);
     TestMakeString(ctx);
     TestHasPropertyForKey(ctx);
+    TestWeakObjectMap();
+    TestWeakObjectMapPerContext();
     JSGlobalContextRelease(ctx);
     return 0;
 }

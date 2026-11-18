@@ -7,7 +7,6 @@ extern "C" {
 int APS5_VABI JSGlobalContextSetDebuggerRunLoopWithCurrentRunLoop();
 int APS5_VABI JSGlobalContextUnsetDebuggerRunLoop();
 int APS5_VABI JSRunLoopIterateCurrentRunLoop();
-int APS5_VABI JSWeakObjectMapClear();
 void APS5_VABI _ZN10Deprecated11ScriptValueC1ERKS0_(void* self, const void* other);
 int APS5_VABI _ZN10Deprecated11ScriptValueC1ERN3JSC2VMENS1_7JSValueE();
 void APS5_VABI _ZN10Deprecated11ScriptValueC1Ev(void* self);

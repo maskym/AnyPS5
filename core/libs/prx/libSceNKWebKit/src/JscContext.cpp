@@ -598,6 +598,9 @@ OpaqueJSContext::OpaqueJSContext(OpaqueJSContextGroup* grp, OpaqueJSClass* globa
 }
 
 OpaqueJSContext::~OpaqueJSContext() {
+    auto maps = std::move(weakMaps);
+    for (auto* map : maps) delete map;
+
     for (auto& [promiseVal, reasonVal] : pendingUnhandledRejections) {
         JS_FreeValue(qctx, promiseVal);
         JS_FreeValue(qctx, reasonVal);

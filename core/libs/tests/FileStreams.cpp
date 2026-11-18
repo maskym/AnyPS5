@@ -1180,7 +1180,6 @@ static void CheckZeroSizedTransfersOnNullStream() {
 }
 
 static void CheckOrdinaryCharacterScans() {
-#ifndef _WIN32
     CheckShortCharacterScanLocking(false, fscanf_nid_postfix);
     CheckShortCharacterScanLocking(false, ScanList);
     using Scanner = int (APS5_VABI*)(FileStream*, const char*, ...);
@@ -1291,7 +1290,6 @@ static void CheckOrdinaryCharacterScans() {
     }
     errno = savedError;
 
-#endif
 }
 
 int main(int argc, char** argv) {

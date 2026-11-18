@@ -694,15 +694,20 @@ int APS5_VABI fprintf_nid_postfix(FileStream* stream, const char* format, ...) {
 int APS5_VABI fscanf_nid_postfix(FileStream* stream, const char* format, ...) {
     std::string quadHead;
     format = CutAtQuadScanDirective(format, quadHead);
-#ifndef _WIN32
     if (HasNarrowCharacterScan(format)) {
+#ifdef _WIN32
+        __builtin_sysv_va_list args;
+        __builtin_sysv_va_start(args, format);
+        const int result = ScanGuestStream(stream, format, [&] { return __builtin_va_arg(args, void*); }, [] { return 0u; }, false);
+        __builtin_sysv_va_end(args);
+#else
         std::va_list args;
         va_start(args, format);
         const int result = ScanGuestStream(stream, format, [&] { return va_arg(args, void*); }, [] { return 0u; }, false);
         va_end(args);
+#endif
         return result;
     }
-#endif
     if (stream && !stream->IsOpen()) { errno = 9; return -1; }
     auto* native = GetNativeStream(stream);
     stream->Orientation(-1);
@@ -1084,12 +1089,10 @@ extern FileStream* __stdinp_nid_postfix;
 int APS5_VABI vfscanf_nid_postfix(FileStream* stream, const char* format, VaList* args) {
     std::string quadHead;
     format = CutAtQuadScanDirective(format, quadHead);
-#ifndef _WIN32
     if (HasNarrowCharacterScan(format)) {
         LibcDetail::FormatArguments arguments(args);
         return ScanGuestStream(stream, format, [&] { return arguments.Next<void*>(); }, [] { return 0u; }, false);
     }
-#endif
     if (stream && !stream->IsOpen()) { errno = 9; return -1; }
     auto* native = GetNativeStream(stream);
     stream->Orientation(-1);

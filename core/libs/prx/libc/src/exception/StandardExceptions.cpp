@@ -807,6 +807,30 @@ static const LibcException::CategoryObject FutureCategory {_ZTVSt22_Future_error
 const LibcException::CategoryObject* APS5_VABI _ZSt15future_categoryv_nid_postfix() {
     return &FutureCategory;
 }
+static const LibcException::TypeRecord IostreamCategoryType {LibcException::SingleTypeVtable + 2, "St24_Iostream_error_category", &LibcException::GenericCategoryType};
+static void APS5_VABI IostreamCategoryDelete_nid_no_patch(LibcException::CategoryObject*) {
+    throw std::invalid_argument("std::error_category: the iostream category object is not heap allocated");
+}
+static const char* APS5_VABI IostreamCategoryName_nid_no_patch(const LibcException::CategoryObject*) { return "iostream"; }
+GuestLocale::String* APS5_VABI IostreamCategoryMessage_nid_no_patch(GuestLocale::String* result, const LibcException::CategoryObject* self, int value) {
+    if (value == 1) return LibcException::FillMessage(result, "iostream stream error");
+    return LibcException::CategoryMessage_nid_no_patch(result, self, value);
+}
+static const void* const IostreamCategoryVtable[] {
+    nullptr, &IostreamCategoryType,
+    reinterpret_cast<const void*>(LibcException::CategoryDestroy_nid_no_patch), reinterpret_cast<const void*>(IostreamCategoryDelete_nid_no_patch),
+    reinterpret_cast<const void*>(IostreamCategoryName_nid_no_patch), reinterpret_cast<const void*>(IostreamCategoryMessage_nid_no_patch),
+    reinterpret_cast<const void*>(LibcException::CategoryCondition_nid_no_patch),
+    reinterpret_cast<const void*>(LibcException::CategoryEquivalentCondition_nid_no_patch),
+    reinterpret_cast<const void*>(LibcException::CategoryEquivalentCode_nid_no_patch)
+};
+static const LibcException::CategoryObject IostreamCategory {IostreamCategoryVtable + 2};
+const LibcException::CategoryObject* APS5_VABI IostreamCategory_nid_no_patch() {
+    return &IostreamCategory;
+}
+const LibcException::CategoryObject* APS5_VABI _ZSt17iostream_categoryv_nid_postfix() {
+    return IostreamCategory_nid_no_patch();
+}
 LibcException::ErrorCode APS5_VABI _ZNKSt14error_category23default_error_conditionEi_nid_postfix(const LibcException::CategoryObject* self, int value) {
     return LibcException::CategoryCondition_nid_no_patch(self, value);
 }

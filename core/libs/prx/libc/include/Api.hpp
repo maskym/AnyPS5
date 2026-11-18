@@ -160,8 +160,8 @@ void* APS5_VABI __cxa_demangle_nid_postfix(const char* mangled, char* buf, std::
 int APS5_VABI __cxa_thread_atexit_impl_nid_postfix(void (APS5_VABI *func)(void*), void* arg, void* dso);
 int APS5_VABI __cxa_thread_atexit_nid_postfix(void (APS5_VABI *func)(void*), void* arg, void* dso);
 int APS5_VABI LibcInternalExtCxaThreadAtexit_nid_postfix(void (APS5_VABI *destructor)(void*), void* object, void* moduleId);
-const std::error_category* APS5_VABI _ZSt17iostream_categoryv_nid_postfix();
-const std::error_category* APS5_VABI IostreamCategory_nid_no_patch();
+const LibcException::CategoryObject* APS5_VABI _ZSt17iostream_categoryv_nid_postfix();
+const LibcException::CategoryObject* APS5_VABI IostreamCategory_nid_no_patch();
 int APS5_VABI _ZSt13_Execute_onceRSt9once_flagPFiPvS1_PS1_ES1__nid_postfix( int* flag, int (APS5_VABI *callback)(void*, void*, void**), void* arg );
 void APS5_VABI _Atomic_store_1_nid_postfix(volatile std::uint8_t* target, std::uint8_t value, int);
 void APS5_VABI _Atomic_store_2_nid_postfix(volatile std::uint16_t* target, std::uint16_t value, int);
@@ -1551,6 +1551,7 @@ const LibcException::CategoryObject* APS5_VABI _ZSt16generic_categoryv_nid_postf
 const LibcException::CategoryObject* APS5_VABI _ZSt15system_categoryv_nid_postfix();
 GuestLocale::String* APS5_VABI _ZNKSt23_Generic_error_category7messageEi_nid_postfix( GuestLocale::String* result, const LibcException::CategoryObject* self, int value);
 const LibcException::CategoryObject* APS5_VABI _ZSt15future_categoryv_nid_postfix();
+GuestLocale::String* APS5_VABI IostreamCategoryMessage_nid_no_patch(GuestLocale::String* result, const LibcException::CategoryObject* self, int value);
 LibcException::ErrorCode APS5_VABI _ZNKSt14error_category23default_error_conditionEi_nid_postfix(const LibcException::CategoryObject* self, int value);
 bool APS5_VABI _ZNKSt14error_category10equivalentEiRKSt15error_condition_nid_postfix(const LibcException::CategoryObject* self, int value, const LibcException::ErrorCode* condition);
 bool APS5_VABI _ZNKSt14error_category10equivalentERKSt10error_codei_nid_postfix(const LibcException::CategoryObject* self, const LibcException::ErrorCode* code, int value);

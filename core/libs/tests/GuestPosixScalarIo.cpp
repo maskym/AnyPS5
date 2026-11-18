@@ -19,7 +19,6 @@
 #ifdef _WIN32
 #include <io.h>
 #else
-#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -32,10 +31,8 @@ static void Check(bool value, int line) {
 
 #define Require(value) Check((value), __LINE__)
 
-#ifndef _WIN32
 static constexpr int GuestEagain = 35;
 static constexpr int GuestEisdir = 21;
-#endif
 
 template <typename Operation>
 static void CheckPosixFailure(Operation operation, int expectedError, int line) {
@@ -212,25 +209,21 @@ int main() {
     Require(sceKernelWritev(brokenPipe[1], &brokenVector, 1) == static_cast<std::int32_t>(0x80020000u | GuestEpipe));
     Require(close_nid_postfix(brokenPipe[1]) == 0);
 #endif
-#ifndef _WIN32
     int nonBlockingPipe[2] = {-1, -1};
     Require(pipe_nid_postfix(nonBlockingPipe) == 0);
-    const int pipeFlags = fcntl(nonBlockingPipe[0], F_GETFL);
-    Require(pipeFlags >= 0 && fcntl(nonBlockingPipe[0], F_SETFL, pipeFlags | O_NONBLOCK) == 0);
+    const int pipeFlags = fcntl_nid_postfix(nonBlockingPipe[0], 3);
+    Require(pipeFlags >= 0 && fcntl_nid_postfix(nonBlockingPipe[0], 4, pipeFlags | SCE_KERNEL_O_NONBLOCK) == 0);
     RequirePosixFailure([&] { return read_nid_postfix(nonBlockingPipe[0], buffer, 1); }, GuestEagain);
     RequirePosixFailure([&] { return _read_nid_postfix(nonBlockingPipe[0], buffer, 1); }, GuestEagain);
     Require(sceKernelRead(nonBlockingPipe[0], direct, 1) == static_cast<std::int32_t>(0x80020000u | GuestEagain));
     Require(close_nid_postfix(nonBlockingPipe[0]) == 0);
     Require(close_nid_postfix(nonBlockingPipe[1]) == 0);
-#endif
-#ifndef _WIN32
     const std::string rootName = root.string();
     const int directory = open_nid_postfix(rootName.c_str(), SCE_KERNEL_O_RDONLY, 0);
     Require(directory >= 0);
     RequirePosixFailure([&] { return read_nid_postfix(directory, buffer, 1); }, GuestEisdir);
     RequirePosixFailure([&] { return _read_nid_postfix(directory, buffer, 1); }, GuestEisdir);
     Require(close_nid_postfix(directory) == 0);
-#endif
     Require(std::filesystem::remove_all(root) == 2);
     return 0;
 }

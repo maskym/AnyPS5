@@ -101,6 +101,45 @@ int main() {
         "a single wide init release through D2 flushes both guest standard output and error");
     Require(single == 0, "the single wide object is left untouched");
 
+    CheckBeforeInit(_ZNSt8ios_base4InitD2Ev_nid_postfix, outPath, errPath, "narrow-d2-pre-out|", "narrow-d2-pre-err|", outExpected, errExpected);
+    CheckDualRelease(_ZNSt8ios_base4InitC2Ev_nid_postfix, _ZNSt8ios_base4InitD2Ev_nid_postfix, libSceLibcInternalInventory_145_nid_no_patch,
+        outPath, errPath, "narrow-c2-out|", "narrow-c2-err|", outExpected, errExpected, "narrow-d2-pre-out|", "narrow-d2-pre-err|");
+    CheckDualRelease(_ZNSt8ios_base4InitC2Ev_nid_postfix, libSceLibcInternalInventory_145_nid_no_patch, _ZNSt8ios_base4InitD2Ev_nid_postfix,
+        outPath, errPath, "narrow-c2-d1-out|", "narrow-c2-d1-err|", outExpected, errExpected);
+
+    CheckDualRelease(_ZNSt6_WinitC2Ev_nid_postfix, _ZNSt6_WinitD1Ev_nid_postfix, _ZNSt6_WinitD2Ev_nid_postfix,
+        outPath, errPath, "wide-c2-out|", "wide-c2-err|", outExpected, errExpected);
+
+    char narrowComplete = 0;
+    char narrowBase = 0;
+    libSceLibcInternalInventory_144_nid_no_patch(&narrowComplete);
+    _ZNSt8ios_base4InitC2Ev_nid_postfix(&narrowBase);
+    WriteStandardStreams("narrow-mixed-out|", "narrow-mixed-err|");
+    _ZNSt8ios_base4InitD2Ev_nid_postfix(&narrowComplete);
+    Require(FileText(outPath) == outExpected && FileText(errPath) == errExpected,
+        "a narrow C2 construction keeps the count after a D2 release");
+    libSceLibcInternalInventory_145_nid_no_patch(&narrowBase);
+    outExpected += "narrow-mixed-out|";
+    errExpected += "narrow-mixed-err|";
+    Require(FileText(outPath) == outExpected && FileText(errPath) == errExpected,
+        "the last narrow release flushes both guest standard output and error");
+    Require(narrowComplete == 0 && narrowBase == 0, "the mixed narrow objects are left untouched");
+
+    char wideComplete = 0;
+    char wideBase = 0;
+    libSceLibcInternalInventory_071_nid_no_patch(&wideComplete);
+    _ZNSt6_WinitC2Ev_nid_postfix(&wideBase);
+    WriteStandardStreams("wide-mixed-out|", "wide-mixed-err|");
+    _ZNSt6_WinitD2Ev_nid_postfix(&wideComplete);
+    Require(FileText(outPath) == outExpected && FileText(errPath) == errExpected,
+        "a wide C2 construction keeps the count after a D2 release");
+    _ZNSt6_WinitD1Ev_nid_postfix(&wideBase);
+    outExpected += "wide-mixed-out|";
+    errExpected += "wide-mixed-err|";
+    Require(FileText(outPath) == outExpected && FileText(errPath) == errExpected,
+        "the last wide release flushes both guest standard output and error");
+    Require(wideComplete == 0 && wideBase == 0, "the mixed wide objects are left untouched");
+
     Require(fclose_nid_postfix(&_Stdout_nid_postfix) == 0, "the guest standard output closes");
     Require(fclose_nid_postfix(&_Stderr_nid_postfix) == 0, "the guest standard error closes");
     std::filesystem::remove(outPath);

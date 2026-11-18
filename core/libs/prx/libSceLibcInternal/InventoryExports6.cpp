@@ -293,12 +293,6 @@ int APS5_VABI __atomic_load_n_nid_postfix() {
     return 0;
 }
 
-int APS5_VABI sceLibcInternalUnknown6_080_bTQcNwRc8hE_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-APS5_EXPORT("bTQcNwRc8hE", sceLibcInternalUnknown6_080_bTQcNwRc8hE_nid_no_patch);
-
 void APS5_VABI sceLibcInternalUnknown6_082_Sopthb9ztZI_nid_no_patch(void) {
 }
 APS5_EXPORT("Sopthb9ztZI", sceLibcInternalUnknown6_082_Sopthb9ztZI_nid_no_patch);

@@ -52,6 +52,9 @@ void APS5_VABI _ZNSt13basic_filebufIcSt11char_traitsIcEE7_UnlockEv_nid_postfix(v
 int APS5_VABI _ZNSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEEC2ERKSt8_Locinfom_nid_postfix();
 void APS5_VABI _ZNSt6_WinitD2Ev_nid_postfix(void* self);
 void APS5_VABI _ZNSt6_WinitD1Ev_nid_postfix(void* self);
+void APS5_VABI _ZNSt6_WinitC2Ev_nid_postfix(void* self);
+void APS5_VABI _ZNSt8ios_base4InitC2Ev_nid_postfix(void* self);
+void APS5_VABI _ZNSt8ios_base4InitD2Ev_nid_postfix(void* self);
 int APS5_VABI _ZSt9_LStrcollIcEiPKT_S2_S2_S2_PKSt8_Collvec_nid_postfix();
 int APS5_VABI _ZNSt9money_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEEC2ERKSt8_Locinfom_nid_postfix();
 int APS5_VABI _ZNSt8numpunctIcEC2ERKSt8_Locinfomb_nid_postfix();

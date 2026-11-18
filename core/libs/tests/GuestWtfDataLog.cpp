@@ -269,10 +269,8 @@ void CheckDeletingDestructor(const std::filesystem::path& directory, const char*
     const std::size_t mark = ReleaseMark();
     destroy(stream);
     Require(ReleasedSince(mark, stream), "the deleting destructor frees the stream");
-    Require(HostDescriptorClosed(descriptor, path), "the deleting destructor closes the FILE");
-#ifndef _WIN32
     Require(ReadAll(path) == "value=42;2.5;unflushed", "the deleting destructor flushes on close");
-#endif
+    Require(HostDescriptorClosed(descriptor, path), "the deleting destructor closes the FILE");
 }
 
 void DestroyD0Export(FilePrintStream* stream) {
@@ -291,10 +289,8 @@ void CheckCompleteDestructorClosesAdoptedFile(const std::filesystem::path& direc
     const std::size_t mark = ReleaseMark();
     destroy(stream);
     Require(!ReleasedSince(mark, stream), "a non-deleting destructor keeps the object");
-    Require(HostDescriptorClosed(descriptor, path), "a non-deleting destructor fcloses an adopted FILE");
-#ifndef _WIN32
     Require(ReadAll(path) == std::string("closed by ") + name, "fclose flushes unflushed output");
-#endif
+    Require(HostDescriptorClosed(descriptor, path), "a non-deleting destructor fcloses an adopted FILE");
     _ZdlPv_nid_postfix(stream);
 }
 

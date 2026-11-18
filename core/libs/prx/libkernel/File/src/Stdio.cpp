@@ -412,8 +412,13 @@ static std::int64_t NativeTransferBuffer(int descriptor, void* buf, std::size_t 
         errno = EBADF;
         return -1;
     }
-    if (!write) return ::_read(descriptor, buf, static_cast<unsigned int>(nbytes));
+    if (!write) {
+        const int result = ::_read(descriptor, buf, static_cast<unsigned int>(nbytes));
+        if (result < 0 && _doserrno == ERROR_NO_DATA) errno = EAGAIN;
+        return result;
+    }
     const int result = ::_write(descriptor, buf, static_cast<unsigned int>(nbytes));
+    if (result < 0 && errno == ENOSPC && _doserrno == 0 && ::GetFileType(reinterpret_cast<HANDLE>(::_get_osfhandle(descriptor))) == FILE_TYPE_PIPE) errno = EAGAIN;
     if (result < 0 && (_doserrno == ERROR_NO_DATA || _doserrno == ERROR_BROKEN_PIPE) && ::GetFileType(reinterpret_cast<HANDLE>(::_get_osfhandle(descriptor))) == FILE_TYPE_PIPE) errno = EPIPE;
     return result;
 }

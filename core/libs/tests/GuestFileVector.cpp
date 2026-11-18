@@ -24,7 +24,6 @@
 static int MakePipe(int* ends) { return ::_pipe(ends, 64, _O_BINARY); }
 static int ClosePipe(int end) { return ::_close(end); }
 #else
-#include <fcntl.h>
 #include <unistd.h>
 static int MakePipe(int* ends) { return ::pipe(ends); }
 static int ClosePipe(int end) { return ::close(end); }
@@ -343,11 +342,14 @@ int main() {
     Require(sceKernelPwritev(ends[1], message, 1, -1) == ErrorEspipe);
     Require(preadv_nid_postfix(ends[0], reads, 2, -1) == -1 && *__error_nid_postfix() == 29);
     Require(pwritev_nid_postfix(ends[1], message, 1, -1) == -1 && *__error_nid_postfix() == 29);
-#ifndef _WIN32
-    Require(::fcntl(ends[0], F_SETFL, ::fcntl(ends[0], F_GETFL) | O_NONBLOCK) == 0);
+    Require(fcntl_nid_postfix(ends[0], 4, fcntl_nid_postfix(ends[0], 3) | 4) == 0);
     Require(sceKernelReadv(ends[0], reads, 2) == ErrorEagain);
     Require(readv_nid_postfix(ends[0], reads, 2) == -1 && *__error_nid_postfix() == 35);
-#endif
+    Require(fcntl_nid_postfix(ends[1], 4, fcntl_nid_postfix(ends[1], 3) | 4) == 0);
+    std::int64_t filled = 0;
+    while ((filled = sceKernelWritev(ends[1], longer, 1)) > 0) {}
+    Require(filled == ErrorEagain);
+    Require(writev_nid_postfix(ends[1], longer, 1) == -1 && *__error_nid_postfix() == 35);
     Require(ClosePipe(ends[0]) == 0 && ClosePipe(ends[1]) == 0);
 
     const int queue = kqueue_nid_postfix();

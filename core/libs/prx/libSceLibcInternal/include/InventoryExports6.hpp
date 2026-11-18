@@ -12,6 +12,8 @@ int APS5_VABI _ZNSt13basic_filebufIcSt11char_traitsIcEE9_EndwriteEv_nid_postfix(
 int APS5_VABI _ZNSt6locale6globalERKS__nid_postfix();
 int APS5_VABI _ZTv0_n24_NSiD0Ev_nid_postfix();
 void APS5_VABI _ZNSt7codecvtIwc9_MbstatetED0Ev_nid_postfix(void* self);
+void APS5_VABI _ZNSt13bad_exceptionD0Ev_nid_postfix(void* self);
+void APS5_VABI _ZNSt9type_infoD0Ev_nid_postfix(void* self);
 int APS5_VABI _ZNSt8numpunctIcEC1EPKcmb_nid_postfix();
 int APS5_VABI _reclaim_telldir_nid_postfix();
 int APS5_VABI _ZNSt13basic_filebufIwSt11char_traitsIwEE9_EndwriteEv_nid_postfix();

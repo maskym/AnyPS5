@@ -51,6 +51,8 @@ int main() {
     const Destructor destructors[] = {
         sceLibcInternalUnknown6_112_6yplvTHbxpE_nid_no_patch,
         _ZNSt7codecvtIwc9_MbstatetED0Ev_nid_postfix,
+        _ZNSt13bad_exceptionD0Ev_nid_postfix,
+        _ZNSt9type_infoD0Ev_nid_postfix,
         _ZNSt8messagesIwED0Ev_nid_postfix,
         _ZNSt24_Iostream_error_categoryD0Ev_nid_postfix,
         _ZNSt8messagesIcED0Ev_nid_postfix,

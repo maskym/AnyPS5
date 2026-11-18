@@ -100,6 +100,13 @@ void CheckCategories() {
         _ZSt16generic_categoryv_nid_postfix(), "_Generic_error_category D0 releases the object");
     CheckCompleteDestructor(&_ZNSt22_Future_error_categoryD1Ev_nid_postfix,
         _ZSt15future_categoryv_nid_postfix(), "future", "_Future_error_category D1 frees nothing");
+    {
+        const void* vtable = _ZSt16generic_categoryv_nid_postfix()->vtable;
+        LibcException::CategoryObject object{vtable};
+        releases = 0;
+        _ZNSt24_Iostream_error_categoryD1Ev_nid_postfix(&object);
+        Require(releases == 0 && object.vtable == vtable, "_Iostream_error_category D1 frees nothing");
+    }
 }
 
 void CheckBadVariantAccess() {

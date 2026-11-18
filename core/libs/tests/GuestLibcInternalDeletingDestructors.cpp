@@ -55,6 +55,7 @@ int main() {
         _ZNSt24_Iostream_error_categoryD0Ev_nid_postfix,
         _ZNSt8messagesIcED0Ev_nid_postfix,
         _ZNSt9money_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEED0Ev_nid_postfix,
+        _ZNSt9money_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix,
     };
 
     for (Destructor destructor : destructors) {

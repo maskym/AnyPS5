@@ -463,6 +463,10 @@ int APS5_VABI _ZNSt13basic_filebufIwSt11char_traitsIwEE5imbueERKSt6locale_nid_po
     return 0;
 }
 
+void APS5_VABI _ZNSt9money_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix(void* self) {
+    _ZdlPv_nid_postfix(self);
+}
+
 void APS5_VABI _ZNSt9money_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEED0Ev_nid_postfix(void* self) {
     _ZdlPv_nid_postfix(self);
 }

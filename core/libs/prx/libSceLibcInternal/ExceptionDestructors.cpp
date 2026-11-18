@@ -46,6 +46,10 @@ void APS5_VABI _ZNSt22_Future_error_categoryD1Ev_nid_postfix(void* self) {
     _ZNSt14error_categoryD2Ev_nid_postfix(static_cast<LibcException::CategoryObject*>(self));
 }
 
+void APS5_VABI _ZNSt24_Iostream_error_categoryD1Ev_nid_postfix(void* self) {
+    _ZNSt14error_categoryD2Ev_nid_postfix(static_cast<LibcException::CategoryObject*>(self));
+}
+
 void APS5_VABI _ZNSt23_Generic_error_categoryD0Ev_nid_postfix(void* self) {
     _ZNSt14error_categoryD2Ev_nid_postfix(static_cast<LibcException::CategoryObject*>(self));
     _ZdlPv_nid_postfix(self);

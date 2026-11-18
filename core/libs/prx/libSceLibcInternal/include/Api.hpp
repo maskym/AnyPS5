@@ -185,6 +185,7 @@ void APS5_VABI sceLibcInternalSystemErrorCategoryDeletingDestructor_nid_no_patch
 void APS5_VABI sceLibcInternalSystemErrorCategoryDestructor_nid_no_patch(void* self);
 void APS5_VABI sceLibcInternalGenericErrorCategoryDestructor_nid_no_patch(void* self);
 void APS5_VABI _ZNSt22_Future_error_categoryD1Ev_nid_postfix(void* self);
+void APS5_VABI _ZNSt24_Iostream_error_categoryD1Ev_nid_postfix(void* self);
 void APS5_VABI _ZNSt23_Generic_error_categoryD0Ev_nid_postfix(void* self);
 void APS5_VABI _ZNSt18bad_variant_accessD1Ev_nid_postfix(void* self);
 void APS5_VABI _ZNSt18bad_variant_accessD0Ev_nid_postfix(void* self);

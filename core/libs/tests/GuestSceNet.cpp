@@ -1475,7 +1475,6 @@ static void CheckKernelTimeouts() {
     RequireTimeout(descriptor, 0x1006, 250000);
     Require(sceNetSetsockopt(descriptor, 0xffff, 0x1106, &microseconds, sizeof(microseconds)) == 0);
     RequireTimeout(descriptor, 0x1006, microseconds);
-#ifndef _WIN32
     std::array<std::uint8_t, 16> loopback{16, 2, 0, 0, 127, 0, 0, 1};
     Require(sceNetBind_nid_postfix(descriptor, loopback.data(), loopback.size()) == 0);
     const KernelTimeval brief{0, 50000};
@@ -1484,7 +1483,6 @@ static void CheckKernelTimeouts() {
     const auto start = std::chrono::steady_clock::now();
     Require(Failed(sceNetRecv(descriptor, buffer, sizeof(buffer), 0), 35));
     Require(std::chrono::steady_clock::now() - start >= std::chrono::milliseconds(40));
-#endif
     Require(sceNetSocketClose(descriptor) == 0);
 }
 

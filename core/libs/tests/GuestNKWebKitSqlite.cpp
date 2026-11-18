@@ -554,6 +554,15 @@ void CheckFileDatabase(const std::filesystem::path& directory) {
     Execute(writer, "INSERT INTO log VALUES(1)");
     Require(walCalls == 1 && walSchema == "main" && walFrames > 0, "wal hook");
     Require(sqlite3_wal_hook_nid_postfix(writer, RecordWal, &walArgument) == &walArgument, "previous wal argument");
+    static int clearedArgument = 0xC4;
+    Require(sqlite3_wal_hook_nid_postfix(writer, nullptr, &clearedArgument) == &walArgument,
+        "clearing the wal hook returns its argument");
+    const int callsBefore = walCalls;
+    Execute(writer, "INSERT INTO log VALUES(3)");
+    Require(walCalls == callsBefore, "a cleared wal hook is not called");
+    Require(sqlite3_wal_hook_nid_postfix(writer, nullptr, nullptr) == &clearedArgument,
+        "a cleared wal hook keeps its argument");
+    Require(sqlite3_wal_hook_nid_postfix(writer, RecordWal, &walArgument) == nullptr, "previous null wal argument");
     int logFrames = -1;
     int checkpointed = -1;
     Require(sqlite3_wal_checkpoint_v2_nid_postfix(writer, "main", SQLITE_CHECKPOINT_PASSIVE, &logFrames,

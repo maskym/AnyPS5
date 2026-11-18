@@ -546,7 +546,7 @@ void* APS5_VABI sqlite3_wal_hook_nid_postfix(sqlite3* db, NKWebKit::GuestSqliteW
     GuestHooks* hooks = Hooks(db);
     void* previous = nullptr;
     if (hooks) {
-        void* host = sqlite3_wal_hook(db, hook ? CallWalHook : nullptr, hook ? hooks : nullptr);
+        void* host = sqlite3_wal_hook(db, hook ? CallWalHook : nullptr, hooks);
         previous = host == hooks ? hooks->walArgument : host;
         hooks->walHook = hook;
         hooks->walArgument = argument;

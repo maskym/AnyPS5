@@ -3,6 +3,8 @@
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/GuestLocale.hpp"
 #include "SceTypes.hpp"
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 
 namespace {
@@ -16,9 +18,103 @@ const GuestLocale::WideNumpunctVtable& WidePunctuation(const GuestLocale::WideNu
     return *reinterpret_cast<const GuestLocale::WideNumpunctVtable*>(self->base.vtable);
 }
 
+struct ScopedLocinfo {
+    GuestLocale::LocinfoStorage storage{};
+    bool active = false;
+
+    explicit ScopedLocinfo(const char* localeName) {
+        _ZNSt8_LocinfoC1EPKc_nid_postfix(&storage, localeName);
+        active = true;
+    }
+
+    ~ScopedLocinfo() {
+        if (active) _ZNSt8_LocinfoD1Ev_nid_postfix(&storage);
+    }
+
+    ScopedLocinfo(const ScopedLocinfo&) = delete;
+    ScopedLocinfo& operator=(const ScopedLocinfo&) = delete;
+};
+
+void ConstructWide(GuestLocale::WideNumpunctFacet* self, std::size_t references) {
+    if (self == nullptr) throw std::invalid_argument("numpunct<wchar_t>::numpunct: null object");
+    self->base.vtable = GuestWideNumpunctVtable_nid_no_patch();
+    self->base.references = static_cast<std::uint32_t>(references);
+    self->base.reserved = static_cast<std::uint32_t>(static_cast<std::uint64_t>(references) >> 32);
+}
+
+void ConstructDefaultWide(GuestLocale::WideNumpunctFacet* self, std::size_t references) {
+    if (self == nullptr) throw std::invalid_argument("numpunct<wchar_t>::numpunct: null object");
+    ScopedLocinfo locinfo("C");
+    ConstructWide(self, references);
+    LibcInitWideNumpunct_nid_no_patch(self, false);
+    if (self->thousandsSep == 0) self->thousandsSep = u',';
+}
+
+void ConstructWideFromLocinfo(GuestLocale::WideNumpunctFacet* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references, bool isDefault) {
+    if (self == nullptr) throw std::invalid_argument("numpunct<wchar_t>::numpunct: null object");
+    if (locinfo == nullptr) throw std::invalid_argument("numpunct<wchar_t>::numpunct: null _Locinfo");
+    ConstructWide(self, references);
+    LibcInitWideNumpunct_nid_no_patch(self, isDefault);
+}
+
+void ConstructNamedWide(GuestLocale::WideNumpunctFacet* self, const char* localeName, std::size_t references, bool isDefault) {
+    if (self == nullptr) throw std::invalid_argument("numpunct<wchar_t>::numpunct: null object");
+    ScopedLocinfo locinfo(localeName);
+    ConstructWide(self, references);
+    LibcInitWideNumpunct_nid_no_patch(self, isDefault);
+}
+
+void RequireWideObject(const GuestLocale::WideNumpunctFacet* self) {
+    if (self == nullptr) throw std::invalid_argument("numpunct<wchar_t>::~numpunct: null object");
+}
+
 }
 
 extern "C" {
+
+void APS5_VABI _ZNSt8numpunctIwEC1Em_nid_postfix(GuestLocale::WideNumpunctFacet* self, std::size_t references) {
+    ConstructDefaultWide(self, references);
+}
+
+void APS5_VABI _ZNSt8numpunctIwEC2Em_nid_postfix(GuestLocale::WideNumpunctFacet* self, std::size_t references) {
+    ConstructDefaultWide(self, references);
+}
+
+void APS5_VABI _ZNSt8numpunctIwEC1ERKSt8_Locinfomb_nid_postfix(GuestLocale::WideNumpunctFacet* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references, bool isDefault) {
+    ConstructWideFromLocinfo(self, locinfo, references, isDefault);
+}
+
+void APS5_VABI _ZNSt8numpunctIwEC2ERKSt8_Locinfomb_nid_postfix(GuestLocale::WideNumpunctFacet* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references, bool isDefault) {
+    ConstructWideFromLocinfo(self, locinfo, references, isDefault);
+}
+
+void APS5_VABI _ZNSt8numpunctIwEC1EPKcmb_nid_postfix(GuestLocale::WideNumpunctFacet* self, const char* localeName, std::size_t references, bool isDefault) {
+    ConstructNamedWide(self, localeName, references, isDefault);
+}
+
+void APS5_VABI _ZNSt8numpunctIwEC2EPKcmb_nid_postfix(GuestLocale::WideNumpunctFacet* self, const char* localeName, std::size_t references, bool isDefault) {
+    ConstructNamedWide(self, localeName, references, isDefault);
+}
+
+void APS5_VABI _ZNSt8numpunctIwE5_InitERKSt8_Locinfob_nid_postfix(GuestLocale::WideNumpunctFacet* self, const GuestLocale::LocinfoStorage* locinfo, bool isDefault) {
+    if (self == nullptr) throw std::invalid_argument("numpunct<wchar_t>::_Init: null object");
+    if (locinfo == nullptr) throw std::invalid_argument("numpunct<wchar_t>::_Init: null _Locinfo");
+    LibcInitWideNumpunct_nid_no_patch(self, isDefault);
+}
+
+void APS5_VABI _ZNSt8numpunctIwED1Ev_nid_postfix(GuestLocale::WideNumpunctFacet* self) {
+    RequireWideObject(self);
+}
+
+void APS5_VABI _ZNSt8numpunctIwED2Ev_nid_postfix(GuestLocale::WideNumpunctFacet* self) {
+    RequireWideObject(self);
+}
+
+void APS5_VABI _ZNSt8numpunctIwED0Ev_nid_postfix(GuestLocale::WideNumpunctFacet* self) {
+    RequireWideObject(self);
+    _ZdlPv_nid_postfix(self);
+}
+
 
 char APS5_VABI sceLibcInternalNumpunctDoDecimalPoint_nid_no_patch(const GuestLocale::NumpunctFacet* self) {
     return NumpunctDoDecimalPoint_nid_no_patch(self);

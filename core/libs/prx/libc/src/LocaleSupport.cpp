@@ -2039,6 +2039,18 @@ const GuestLocale::CollateVtable* GuestWideCollateVtable_nid_no_patch() {
     return &g_wideCollateVtable;
 }
 
+const GuestLocale::FacetVtable* GuestWideNumpunctVtable_nid_no_patch() {
+    return &g_wideNumpunctVtable.facet;
+}
+
+void LibcInitWideNumpunct_nid_no_patch(GuestLocale::WideNumpunctFacet* self, bool isDefault) {
+    const SonyLconv* conventions = localeconv_nid_postfix();
+    self->grouping = isDefault ? g_wideNumpunctGrouping : conventions->grouping;
+    self->falsename = g_wideNumpunctFalseName;
+    self->truename = g_wideNumpunctTrueName;
+    SetSceV2WideNumpunctSeparators(self, conventions, isDefault);
+}
+
 std::size_t APS5_VABI _ZNSt7collateIwE7_GetcatEPPKNSt6locale5facetEPKS1__nid_postfix(GuestLocale::Facet** facet, const GuestLocale::Implementation* const* locale) {
     if (facet != nullptr && *facet == nullptr) {
         if (locale == nullptr || *locale == nullptr || (*locale)->name == nullptr || std::strcmp((*locale)->name, "C") != 0) throw std::invalid_argument("collate::_Getcat: only the C locale is supported");

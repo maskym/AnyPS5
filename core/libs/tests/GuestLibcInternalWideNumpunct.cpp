@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 #include <string>
 
 namespace {
@@ -84,6 +85,33 @@ const GuestLocale::WideNumpunctVtable g_derivedVtable{{FacetNop, FacetNop, Facet
 const std::uint16_t g_offName[] = {'d', 'i', 's', 'a', 'b', 'l', 'e', 'd', 0};
 const std::uint16_t g_onName[] = {0x00e9, 'i', 0};
 
+struct FacetStorage {
+    alignas(GuestLocale::WideNumpunctFacet) unsigned char bytes[0x30];
+
+    FacetStorage() { std::memset(bytes, 0xCC, sizeof(bytes)); }
+    GuestLocale::WideNumpunctFacet* facet() { return reinterpret_cast<GuestLocale::WideNumpunctFacet*>(bytes); }
+};
+
+void RequireConstructed(const GuestLocale::WideNumpunctFacet* facet, const GuestLocale::FacetVtable* vtable, std::uint32_t references, std::uint16_t thousandsSep, const char* message) {
+    Require(facet->base.vtable == vtable, message);
+    Require(facet->base.references == references, message);
+    Require(facet->base.reserved == 0, message);
+    Require(sceLibcInternalWideNumpunctDoDecimalPoint_nid_no_patch(facet) == u'.', message);
+    Require(sceLibcInternalWideNumpunctDoThousandsSep_nid_no_patch(facet) == thousandsSep, message);
+    Require(CallNarrow(sceLibcInternalWideNumpunctDoGrouping_nid_no_patch, facet).empty(), message);
+    Require(CallWide(sceLibcInternalWideNumpunctDoFalsename_nid_no_patch, facet, WideInlineCapacity) == u"false", message);
+    Require(CallWide(sceLibcInternalWideNumpunctDoTruename_nid_no_patch, facet, WideInlineCapacity) == u"true", message);
+}
+
+template<typename Call> bool ThrowsInvalidArgument(Call call) {
+    try {
+        call();
+    } catch (const std::invalid_argument&) {
+        return true;
+    }
+    return false;
+}
+
 }
 
 int main() {
@@ -123,6 +151,74 @@ int main() {
     Require(CallNarrow(sceLibcInternalWideNumpunctDoGrouping_nid_no_patch, &derived) == "\4", "do_grouping copies the facet's narrow grouping");
     Require(CallWide(sceLibcInternalWideNumpunctDoFalsename_nid_no_patch, &derived, 15) == u"disabled", "do_falsename copies a false name longer than the inline buffer");
     Require(CallWide(sceLibcInternalWideNumpunctDoTruename_nid_no_patch, &derived, WideInlineCapacity) == u"éi", "do_truename copies the facet's 16-bit true name");
+
+    const GuestLocale::FacetVtable* vtable = created->vtable;
+    using DefaultConstructor = void (APS5_VABI*)(GuestLocale::WideNumpunctFacet*, std::size_t);
+    for (DefaultConstructor construct : {_ZNSt8numpunctIwEC1Em_nid_postfix, _ZNSt8numpunctIwEC2Em_nid_postfix}) {
+        FacetStorage storage;
+        construct(storage.facet(), 3);
+        RequireConstructed(storage.facet(), vtable, 3, u',', "numpunct(size_t) builds the C-locale wide facet with the reference count");
+    }
+    {
+        FacetStorage storage;
+        _ZNSt8numpunctIwEC1Em_nid_postfix(storage.facet(), 0x100000002ull);
+        Require(storage.facet()->base.references == 2 && storage.facet()->base.reserved == 1, "numpunct(size_t) stores a 64-bit reference count");
+    }
+
+    GuestLocale::LocinfoStorage locinfo{};
+    _ZNSt8_LocinfoC1EPKc_nid_postfix(&locinfo, "C");
+    using LocinfoConstructor = void (APS5_VABI*)(GuestLocale::WideNumpunctFacet*, const GuestLocale::LocinfoStorage*, std::size_t, bool);
+    for (LocinfoConstructor construct : {_ZNSt8numpunctIwEC1ERKSt8_Locinfomb_nid_postfix, _ZNSt8numpunctIwEC2ERKSt8_Locinfomb_nid_postfix}) {
+        FacetStorage storage;
+        construct(storage.facet(), &locinfo, 1, false);
+        RequireConstructed(storage.facet(), vtable, 1, 0, "numpunct(const _Locinfo&) takes the C locale's empty thousands separator");
+        FacetStorage defaults;
+        construct(defaults.facet(), &locinfo, 0, true);
+        RequireConstructed(defaults.facet(), vtable, 0, u',', "numpunct(const _Locinfo&, _Isdef) uses the default separators");
+        Require(ThrowsInvalidArgument([&] { construct(storage.facet(), nullptr, 0, false); }), "numpunct(const _Locinfo&) rejects a null _Locinfo");
+        Require(ThrowsInvalidArgument([&] { construct(nullptr, &locinfo, 0, false); }), "numpunct(const _Locinfo&) rejects a null object");
+    }
+
+    using NamedConstructor = void (APS5_VABI*)(GuestLocale::WideNumpunctFacet*, const char*, std::size_t, bool);
+    for (NamedConstructor construct : {_ZNSt8numpunctIwEC1EPKcmb_nid_postfix, _ZNSt8numpunctIwEC2EPKcmb_nid_postfix}) {
+        FacetStorage storage;
+        construct(storage.facet(), "C", 5, false);
+        RequireConstructed(storage.facet(), vtable, 5, 0, "numpunct(const char*) takes the C locale's empty thousands separator");
+        FacetStorage defaults;
+        construct(defaults.facet(), "C", 5, true);
+        RequireConstructed(defaults.facet(), vtable, 5, u',', "numpunct(const char*, _Isdef) uses the default separators");
+        Require(ThrowsInvalidArgument([&] { construct(storage.facet(), "fr_FR", 0, false); }), "numpunct(const char*) rejects a locale other than C");
+    }
+
+    {
+        FacetStorage storage;
+        auto* facet = storage.facet();
+        facet->base = {&g_derivedVtable.facet, 7, 9};
+        _ZNSt8numpunctIwE5_InitERKSt8_Locinfob_nid_postfix(facet, &locinfo, true);
+        Require(facet->base.vtable == &g_derivedVtable.facet && facet->base.references == 7 && facet->base.reserved == 9, "_Init keeps the facet header");
+        Require(facet->decimalPoint == u'.' && facet->thousandsSep == u',', "_Init with _Isdef sets the default separators");
+        Require(facet->grouping != nullptr && facet->grouping[0] == 0, "_Init sets an empty grouping");
+        Require(std::memcmp(facet->falsename, u"false", sizeof(u"false")) == 0 && std::memcmp(facet->truename, u"true", sizeof(u"true")) == 0, "_Init sets the false and true names");
+        _ZNSt8numpunctIwE5_InitERKSt8_Locinfob_nid_postfix(facet, &locinfo, false);
+        Require(facet->decimalPoint == u'.' && facet->thousandsSep == 0, "_Init without _Isdef takes the C locale's separators");
+        Require(ThrowsInvalidArgument([&] { _ZNSt8numpunctIwE5_InitERKSt8_Locinfob_nid_postfix(facet, nullptr, false); }), "_Init rejects a null _Locinfo");
+    }
+    _ZNSt8_LocinfoD1Ev_nid_postfix(&locinfo);
+
+    for (auto destroy : {_ZNSt8numpunctIwED1Ev_nid_postfix, _ZNSt8numpunctIwED2Ev_nid_postfix}) {
+        FacetStorage storage;
+        _ZNSt8numpunctIwEC1Em_nid_postfix(storage.facet(), 1);
+        unsigned char before[sizeof(storage.bytes)];
+        std::memcpy(before, storage.bytes, sizeof(before));
+        destroy(storage.facet());
+        Require(std::memcmp(before, storage.bytes, sizeof(before)) == 0, "the complete and base destructors leave the facet unchanged");
+        Require(ThrowsInvalidArgument([&] { destroy(nullptr); }), "the destructors reject a null object");
+    }
+    auto* heapFacet = static_cast<GuestLocale::WideNumpunctFacet*>(_Znwm_nid_postfix(0x30));
+    Require(heapFacet != nullptr, "operator new returns facet storage");
+    _ZNSt8numpunctIwEC1Em_nid_postfix(heapFacet, 0);
+    _ZNSt8numpunctIwED0Ev_nid_postfix(heapFacet);
+    Require(ThrowsInvalidArgument([] { _ZNSt8numpunctIwED0Ev_nid_postfix(nullptr); }), "the deleting destructor rejects a null object");
 
     created->vtable->deleteObject(created);
     return 0;

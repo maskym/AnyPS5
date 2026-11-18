@@ -57,6 +57,62 @@ void CheckLocinfo() {
     Require(Throws([] { sceLibcInternalLocinfoBaseDestructor_nid_no_patch(nullptr); }), "destroying a null object is rejected");
 }
 
+template <typename Construct>
+void CheckLocinfoStringConstruction(Construct construct, const GuestLocale::String& name, const char* message) {
+    alignas(16) std::array<std::byte, 80> bytes;
+    bytes.fill(std::byte{0x5a});
+    void* storage = bytes.data() + 8;
+    construct(storage, &name);
+    for (std::size_t index = 0; index < bytes.size(); ++index) {
+        Require(bytes[index] == (index >= 8 && index < 72 ? std::byte{} : std::byte{0x5a}), message);
+    }
+    _ZNSt8_LocinfoD1Ev_nid_postfix(static_cast<GuestLocale::LocinfoStorage*>(storage));
+}
+
+void CheckLocinfoString() {
+    GuestLocale::String inlineName{};
+    std::memcpy(inlineName.buffer, "C", 2);
+    inlineName.size = 1;
+    inlineName.capacity = 15;
+
+    char heapCharacters[] = "C";
+    GuestLocale::String heapName{};
+    heapName.pointer = heapCharacters;
+    heapName.size = 1;
+    heapName.capacity = 31;
+
+    for (auto* construct : {&sceLibcInternalLocinfoStringConstructor_nid_no_patch, &sceLibcInternalLocinfoStringBaseConstructor_nid_no_patch}) {
+        CheckLocinfoStringConstruction(construct, inlineName, "a short string constructs only the 64-byte object");
+        CheckLocinfoStringConstruction(construct, heapName, "a heap string constructs only the 64-byte object");
+
+        alignas(16) std::array<std::byte, 80> bytes{};
+        void* storage = bytes.data() + 8;
+
+        GuestLocale::String posix{};
+        std::memcpy(posix.buffer, "POSIX", 6);
+        posix.size = 5;
+        posix.capacity = 15;
+        Require(Throws([&] { construct(storage, &posix); }), "an unsupported short locale name is rejected");
+
+        char longCharacters[] = "en_US.UTF-8";
+        GuestLocale::String longName{};
+        longName.pointer = longCharacters;
+        longName.size = 11;
+        longName.capacity = 31;
+        Require(Throws([&] { construct(storage, &longName); }), "an unsupported heap locale name is rejected");
+
+        Require(Throws([&] { construct(storage, nullptr); }), "a null string is rejected");
+
+        GuestLocale::String embedded{};
+        std::memcpy(embedded.buffer, "C\0x", 4);
+        embedded.size = 3;
+        embedded.capacity = 15;
+        Require(Throws([&] { construct(storage, &embedded); }), "a name containing a null character is rejected");
+
+        Require(Throws([&] { construct(nullptr, &inlineName); }), "a null object is rejected");
+    }
+}
+
 void CheckLocimpCopy() {
     std::array<GuestLocale::Facet, 2> facets{};
     std::array<GuestLocale::Facet*, 3> slots{&facets[0], nullptr, &facets[1]};
@@ -102,6 +158,7 @@ int main() {
     ApplicationHeapRegister_nid_no_patch(api.data());
 
     CheckLocinfo();
+    CheckLocinfoString();
     CheckLocimpCopy();
 
     std::puts("libc internal _Locinfo and _Locimp base-object checks passed");

@@ -129,8 +129,6 @@ int APS5_VABI libSceLibcInternalInventory_136_nid_no_patch();
 void APS5_VABI libSceLibcInternalInventory_137_nid_no_patch(void* self);
 void APS5_VABI libSceLibcInternalInventory_138_nid_no_patch(void* self);
 int APS5_VABI libSceLibcInternalInventory_139_nid_no_patch();
-int APS5_VABI libSceLibcInternalInventory_140_nid_no_patch();
-int APS5_VABI libSceLibcInternalInventory_142_nid_no_patch();
 int APS5_VABI libSceLibcInternalInventory_143_nid_no_patch();
 void APS5_VABI libSceLibcInternalInventory_144_nid_no_patch(void* self);
 void APS5_VABI libSceLibcInternalInventory_145_nid_no_patch(void* self);

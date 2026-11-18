@@ -15,6 +15,7 @@
 #include <functional>
 #include <limits>
 #include <new>
+#include <stdexcept>
 #include <string>
 
 struct TypeRecord { const void* vtable; const char* name; const TypeRecord* base; };
@@ -37,11 +38,16 @@ namespace {
 
 char caught[128];
 long live = 0;
+int failingAllocations = 0;
 bool failNextAllocation = false;
 std::size_t lastAllocationSize = 0;
 
 void* APS5_VABI TestAllocate(std::size_t size) {
     lastAllocationSize = size;
+    if (failingAllocations > 0) {
+        --failingAllocations;
+        throw std::bad_alloc();
+    }
     if (failNextAllocation) {
         failNextAllocation = false;
         throw std::bad_alloc();
@@ -410,6 +416,71 @@ void CheckWideModifiersAndNarrowInsert() {
     if (failed) std::exit(1);
 }
 
+void CheckNarrowCopy() {
+    String fromInline = Make("hello");
+    const long inlineLive = live;
+    _ZNSs5_CopyEmm_nid_postfix(&fromInline, 16, 5);
+    Require(Holds(fromInline, "hello") && fromInline.capacity == 31 && live == inlineLive + 1,
+        "narrow _Copy moves an inline string to a heap buffer rounded up to 31 characters");
+    GuestLocale::ReleaseStringStorage(fromInline);
+
+    const std::string text(47, 'b');
+    String geometric = Make(text.c_str());
+    Require(geometric.capacity == 47, "narrow _Copy growth starts with capacity 47");
+    const long geometricLive = live;
+    _ZNSs5_CopyEmm_nid_postfix(&geometric, 48, 47);
+    Require(Holds(geometric, text.c_str()) && geometric.capacity == 70 && live == geometricLive,
+        "narrow _Copy grows by half the old capacity and releases the old buffer");
+    GuestLocale::ReleaseStringStorage(geometric);
+
+    String kept = Make("abcdefghij");
+    _ZNSs5_CopyEmm_nid_postfix(&kept, 20, 4);
+    Require(Holds(kept, "abcd") && kept.capacity == 31, "narrow _Copy keeps only the requested length and terminates it");
+    GuestLocale::ReleaseStringStorage(kept);
+
+    const std::string twenty(20, 'c');
+    String retried = Make(twenty.c_str());
+    Require(retried.capacity == 31, "narrow _Copy retry starts with capacity 31");
+    const long retriedLive = live;
+    failNextAllocation = true;
+    lastAllocationSize = 0;
+    _ZNSs5_CopyEmm_nid_postfix(&retried, 40, 20);
+    Require(!failNextAllocation && lastAllocationSize == 41 && Holds(retried, twenty.c_str()) && retried.capacity == 40
+        && live == retriedLive,
+        "narrow _Copy retries a failed allocation at the requested size");
+    GuestLocale::ReleaseStringStorage(retried);
+
+    String failed = Make(twenty.c_str());
+    const long failedLive = live;
+    failingAllocations = 2;
+    bool caughtBadAlloc = false;
+    try {
+        _ZNSs5_CopyEmm_nid_postfix(&failed, 40, 20);
+    } catch (const std::bad_alloc&) {
+        caughtBadAlloc = true;
+    }
+    Require(caughtBadAlloc && failingAllocations == 0 && failed.size == 0 && failed.capacity == GuestLocale::StringInlineCapacity
+        && failed.buffer[0] == 0 && live == failedLive - 1,
+        "narrow _Copy discards the storage and rethrows when the retry fails too");
+
+    String small = Make("hello");
+    bool inlineRejected = false;
+    try {
+        _ZNSs5_CopyEmm_nid_postfix(&small, 15, 0);
+    } catch (const std::invalid_argument&) {
+        inlineRejected = true;
+    }
+    bool longerRejected = false;
+    try {
+        _ZNSs5_CopyEmm_nid_postfix(&small, 20, 6);
+    } catch (const std::invalid_argument&) {
+        longerRejected = true;
+    }
+    Require(inlineRejected && longerRejected && Holds(small, "hello"),
+        "narrow _Copy rejects a new size that fits the inline buffer and a kept length above the size");
+    GuestLocale::ReleaseStringStorage(small);
+}
+
 void CheckNarrowInsertGrowth() {
     const std::string original(63, 'a');
     std::string expected = original;
@@ -566,6 +637,7 @@ int main() {
     CheckAppendCharacters();
     CheckErase();
     CheckWideModifiersAndNarrowInsert();
+    CheckNarrowCopy();
     CheckNarrowInsertGrowth();
     CheckWideCapacityAndAliases();
     CheckWideBoundaryAndFailures();

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstring>
 #include <limits>
+#include <stdexcept>
 
 namespace {
 
@@ -71,6 +72,28 @@ void Assign(String* string, const char* source, std::size_t count) {
     string->pointer = data;
     string->capacity = capacity;
     string->size = count;
+}
+
+std::size_t NarrowGrowthCapacity(const String* string, std::size_t size) {
+    const std::size_t rounded = size | GuestLocale::StringCapacityMask;
+    if (rounded < size || rounded > MaxSize) return size;
+    if (string->capacity > GuestLocale::StringInlineCapacity && string->capacity / 2 > rounded / 3) {
+        if (string->capacity > MaxSize - string->capacity / 2) _ZSt11_Xbad_allocv_nid_postfix();
+        return string->capacity + string->capacity / 2;
+    }
+    return rounded;
+}
+
+char* AllocateNarrow(std::size_t capacity) {
+    const std::size_t bytes = capacity + 1;
+    if (bytes >= GuestStringStorage::LargeAllocation && bytes > NoPosition - GuestStringStorage::AllocationPadding) _ZSt11_Xbad_allocv_nid_postfix();
+    return static_cast<char*>(GuestStringStorage::Allocate(bytes));
+}
+
+void TidyNarrow(String* string) {
+    if (string->capacity > GuestLocale::StringInlineCapacity) GuestStringStorage::Deallocate(string->pointer, string->capacity + 1);
+    string->capacity = GuestLocale::StringInlineCapacity;
+    SetSize(string, 0);
 }
 
 char* WideData(String* string) {
@@ -170,17 +193,8 @@ void AssignWide(String* string, const char* source, std::size_t count) {
 void ReserveForInsert(String* string, std::size_t size) {
     if (size > MaxSize) _ZNKSs5_XlenEv_nid_postfix(string);
     if (size <= string->capacity) return;
-    const std::size_t rounded = size | GuestLocale::StringCapacityMask;
-    std::size_t capacity = rounded;
-    if (rounded < size || rounded > MaxSize) {
-        capacity = size;
-    } else if (string->capacity > GuestLocale::StringInlineCapacity && string->capacity / 2 > rounded / 3) {
-        if (string->capacity > MaxSize - string->capacity / 2) _ZSt11_Xbad_allocv_nid_postfix();
-        capacity = string->capacity + string->capacity / 2;
-    }
-    const std::size_t bytes = capacity + 1;
-    if (bytes >= GuestStringStorage::LargeAllocation && bytes > NoPosition - GuestStringStorage::AllocationPadding) _ZSt11_Xbad_allocv_nid_postfix();
-    auto* data = static_cast<char*>(GuestStringStorage::Allocate(bytes));
+    const std::size_t capacity = NarrowGrowthCapacity(string, size);
+    char* data = AllocateNarrow(capacity);
     char* old = Data(string);
     std::memcpy(data, old, string->size + 1);
     const std::size_t oldCapacity = string->capacity;
@@ -248,6 +262,31 @@ String* APS5_VABI _ZNSs6assignEmc_nid_postfix(String* self, std::size_t count, c
     if (count != 0) std::memset(Data(self), character, count);
     SetSize(self, count);
     return self;
+}
+
+void APS5_VABI _ZNSs5_CopyEmm_nid_postfix(String* self, std::size_t newSize, std::size_t oldLength) {
+    if (self == nullptr) throw std::invalid_argument("basic_string<char>::_Copy: null string");
+    if (newSize > MaxSize) _ZNKSs5_XlenEv_nid_postfix(self);
+    if (oldLength > self->size || oldLength > newSize || newSize <= GuestLocale::StringInlineCapacity)
+        throw std::invalid_argument("basic_string<char>::_Copy: the new size must exceed the inline buffer and hold the kept length");
+    std::size_t capacity = NarrowGrowthCapacity(self, newSize);
+    char* data = nullptr;
+    try {
+        data = AllocateNarrow(capacity);
+    } catch (...) {
+        capacity = newSize;
+        try {
+            data = AllocateNarrow(capacity);
+        } catch (...) {
+            TidyNarrow(self);
+            throw;
+        }
+    }
+    if (oldLength != 0) std::memcpy(data, Data(self), oldLength);
+    if (self->capacity > GuestLocale::StringInlineCapacity) GuestStringStorage::Deallocate(self->pointer, self->capacity + 1);
+    self->pointer = data;
+    self->capacity = capacity;
+    SetSize(self, oldLength);
 }
 
 String* APS5_VABI _ZNSbIwSt11char_traitsIwESaIwEE5eraseEmm_nid_postfix(String* self, std::size_t position, std::size_t count) {

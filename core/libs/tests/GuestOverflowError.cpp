@@ -61,7 +61,8 @@ int main() {
     Require(table.destroy == runtimeTable.destroy && table.deleteObject == runtimeTable.deleteObject && table.what == runtimeTable.what);
 
     LibcException::ExceptionObject object{};
-    _ZNSt13runtime_errorC1EPKc_nid_postfix(&object, "value too large");
+    _ZNSt14overflow_errorC1EPKc_nid_postfix(&object, "value too large");
+    Require(object.vtable == &table.destroy);
     Require(object.message != nullptr && std::strcmp(object.message, "value too large") == 0);
     Require(std::strcmp(table.what(&object), "value too large") == 0);
     Require(std::strcmp(_ZNKSt13runtime_error4whatEv_nid_postfix(&object), "value too large") == 0);
@@ -72,13 +73,15 @@ int main() {
     Require(object.message == nullptr);
 
     LibcException::ExceptionObject emptyMessage{};
-    _ZNSt13runtime_errorC1EPKc_nid_postfix(&emptyMessage, "");
+    _ZNSt14overflow_errorC1EPKc_nid_postfix(&emptyMessage, "");
+    Require(emptyMessage.vtable == &table.destroy);
     Require(emptyMessage.message != nullptr && std::strcmp(table.what(&emptyMessage), "") == 0);
     _ZNSt14overflow_errorD1Ev_nid_postfix(&emptyMessage);
     Require(emptyMessage.message == nullptr);
 
     LibcException::ExceptionObject nullMessage{};
-    _ZNSt13runtime_errorC1EPKc_nid_postfix(&nullMessage, nullptr);
+    _ZNSt14overflow_errorC1EPKc_nid_postfix(&nullMessage, nullptr);
+    Require(nullMessage.vtable == &table.destroy);
     Require(nullMessage.message != nullptr && std::strcmp(table.what(&nullMessage), "") == 0);
     table.destroy(&nullMessage);
     Require(nullMessage.message == nullptr);
@@ -86,7 +89,8 @@ int main() {
     auto* allocated = static_cast<LibcException::ExceptionObject*>(std::malloc(sizeof(LibcException::ExceptionObject)));
     Require(allocated != nullptr);
     *allocated = {};
-    _ZNSt13runtime_errorC1EPKc_nid_postfix(allocated, "heap overflow");
+    _ZNSt14overflow_errorC1EPKc_nid_postfix(allocated, "heap overflow");
+    Require(allocated->vtable == &table.destroy);
     Require(std::strcmp(table.what(allocated), "heap overflow") == 0);
     table.deleteObject(allocated);
 

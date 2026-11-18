@@ -2,10 +2,12 @@
 #include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
 #include <thread>
+#include <vector>
 struct Timeval {
     std::int64_t tv_sec;
     std::int64_t tv_usec;
@@ -25,6 +27,11 @@ static void SpinUntil(int who, std::int64_t micros) {
         for (int i = 0; i < 100000; ++i) sink = sink + i;
         Require(std::chrono::steady_clock::now() < deadline);
     }
+}
+static std::int64_t MaxRss(int who) {
+    GuestResourceUsage usage{};
+    Require(getrusage_nid_postfix(who, &usage) == 0);
+    return usage.ru_maxrss;
 }
 static void RequireFailure(int who, GuestResourceUsage* usage, int error) {
     *__error_nid_postfix() = 0;
@@ -53,6 +60,14 @@ int main() {
     Require(getrusage_nid_postfix(-1, &children) == 0 && *__error_nid_postfix() == 77);
     const GuestResourceUsage empty{};
     Require(std::memcmp(&children, &empty, sizeof(children)) == 0);
+    const std::int64_t before = MaxRss(0);
+    std::vector<char> block(64u << 20);
+    volatile char* const bytes = block.data();
+    for (std::size_t i = 0; i < block.size(); i += 4096) bytes[i] = 1;
+    Require(before > 0 && MaxRss(0) >= before + 60000);
+#ifndef __APPLE__
+    Require(MaxRss(1) >= before + 60000);
+#endif
     SpinUntil(0, 400000);
     const std::int64_t mainThread = CpuMicros(1);
     Require(mainThread >= 200000);

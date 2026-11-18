@@ -7,6 +7,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <psapi.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
 #else
@@ -1150,6 +1151,10 @@ int APS5_VABI getrusage_nid_postfix(int who, GuestResourceUsage* usage) {
     result.ru_utime.tv_usec = static_cast<std::int64_t>(userMicros % 1000000ULL);
     result.ru_stime.tv_sec = static_cast<std::int64_t>(kernelMicros / 1000000ULL);
     result.ru_stime.tv_usec = static_cast<std::int64_t>(kernelMicros % 1000000ULL);
+    PROCESS_MEMORY_COUNTERS memory{};
+    if (!K32GetProcessMemoryInfo(GetCurrentProcess(), &memory, sizeof(memory)))
+        throw std::system_error(GetLastError(), std::system_category(), "getrusage: GetProcessMemoryInfo failed");
+    result.ru_maxrss = static_cast<std::int64_t>(memory.PeakWorkingSetSize / 1024);
 #else
     struct rusage native{};
 #ifdef __APPLE__

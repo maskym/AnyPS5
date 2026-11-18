@@ -18,6 +18,7 @@
 #endif
 #include <atomic>
 #include <stdexcept>
+#include <system_error>
 #include "prx/libc/include/Shutdown.hpp"
 #include "prx/libc/include/RunReport.hpp"
 
@@ -318,7 +319,7 @@ extern "C" void RegisterChildProcess_nid_no_patch(std::int32_t processId, std::i
     childProcesses.push_back({processId, processHandle});
 }
 
-extern "C" std::int64_t WaitChildProcess_nid_no_patch(std::int32_t processId, unsigned options, int* status, bool requireUsage) {
+extern "C" std::int64_t WaitChildProcess_nid_no_patch(std::int32_t processId, unsigned options, int* status, std::uint64_t* userMicros, std::uint64_t* kernelMicros) {
     const bool noWait = (options & 1u) != 0;
     const auto matches = [&](const ChildProcess& child) { return processId <= 0 || child.processId == processId; };
     {
@@ -340,7 +341,12 @@ extern "C" std::int64_t WaitChildProcess_nid_no_patch(std::int32_t processId, un
                     *__error_nid_postfix() = 14;
                     return -1;
                 }
-                if (requireUsage) NotImplemented_nid_no_patch("wait4: child resource accounting on Windows");
+                if (userMicros != nullptr || kernelMicros != nullptr) {
+                    FILETIME creation{}, exitTime{}, kernel{}, user{};
+                    if (!GetProcessTimes(handle, &creation, &exitTime, &kernel, &user)) throw std::system_error(GetLastError(), std::system_category(), "wait4: GetProcessTimes failed");
+                    if (userMicros != nullptr) *userMicros = ((static_cast<std::uint64_t>(user.dwHighDateTime) << 32) | user.dwLowDateTime) / 10ULL;
+                    if (kernelMicros != nullptr) *kernelMicros = ((static_cast<std::uint64_t>(kernel.dwHighDateTime) << 32) | kernel.dwLowDateTime) / 10ULL;
+                }
                 encoded = ChildProcessWaitStatus(code);
                 CloseHandle(handle);
                 reaped = child.processId;

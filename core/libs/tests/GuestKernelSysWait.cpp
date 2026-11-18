@@ -64,7 +64,7 @@ static Function LoadFunction(void* module, const char* name, bool patched, const
 
 
 int main(int argc, char** argv) {
-    if (argc == 2 && std::strcmp(argv[1], "child") == 0) return 42;
+    if (argc == 3 && std::strcmp(argv[1], "child") == 0) return std::atoi(argv[2]);
     Require(argc == 4);
     const auto directory = std::filesystem::absolute(argv[1]);
     const bool patched = std::strcmp(argv[2], "patched") == 0;
@@ -103,17 +103,32 @@ int main(int argc, char** argv) {
     const auto length = GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
     Require(length != 0 && length < executable.size());
     executable.resize(length);
-    std::wstring command = L"\"" + executable + L"\" child";
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION child{};
-    Require(CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &child) != FALSE);
-    Require(CloseHandle(child.hThread) != FALSE);
     const auto registerChild = reinterpret_cast<void (*)(std::int32_t, std::int64_t)>(GetProcAddress(static_cast<HMODULE>(libc), "RegisterChildProcess_nid_no_patch"));
     Require(registerChild != nullptr);
-    registerChild(static_cast<std::int32_t>(child.dwProcessId), reinterpret_cast<std::int64_t>(child.hProcess));
-    const int reaped = test == "wait3" ? wait3(&status, 0, nullptr) : wait4(static_cast<int>(child.dwProcessId), &status, 0, nullptr);
-    Require(reaped == static_cast<int>(child.dwProcessId) && status == (42 << 8));
+    const auto spawn = [&](int code) {
+        std::wstring command = L"\"" + executable + L"\" child " + std::to_wstring(code);
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION child{};
+        Require(CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &child) != FALSE);
+        Require(CloseHandle(child.hThread) != FALSE);
+        registerChild(static_cast<std::int32_t>(child.dwProcessId), reinterpret_cast<std::int64_t>(child.hProcess));
+        return static_cast<int>(child.dwProcessId);
+    };
+    const int child = spawn(42);
+    const int reaped = test == "wait3" ? wait3(&status, 0, usage.data()) : wait4(child, &status, 0, usage.data());
+    Require(reaped == child && status == (42 << 8));
+    GuestResourceUsage resources{};
+    static_assert(sizeof(resources) == usage.size());
+    std::memcpy(&resources, usage.data(), sizeof(resources));
+    Require(resources.ru_utime.tv_sec >= 0 && resources.ru_stime.tv_sec >= 0);
+    Require(resources.ru_utime.tv_usec >= 0 && resources.ru_utime.tv_usec < 1000000);
+    Require(resources.ru_stime.tv_usec >= 0 && resources.ru_stime.tv_usec < 1000000);
+    Require(resources.ru_maxrss == 0 && resources.ru_minflt == 0 && resources.ru_nvcsw == 0);
+    const int second = spawn(7);
+    const int failed = test == "wait3" ? wait3(&status, 0, reinterpret_cast<void*>(1)) : wait4(second, &status, 0, reinterpret_cast<void*>(1));
+    Require(failed == -1 && *error() == 14 && status == (7 << 8));
+    Require(call(nullptr, nullptr) == -1 && *error() == 10);
 #else
     int barrier[2]{};
     Require(::pipe(barrier) == 0);

@@ -1683,6 +1683,9 @@ void APS5_VABI _ZNSt8ios_base7failureD1Ev_nid_postfix(LibcException::ExceptionOb
 void APS5_VABI _ZNSt8ios_base7failureD2Ev_nid_postfix(LibcException::ExceptionObject* self);
 void APS5_VABI _ZNSt8ios_base7failureD0Ev_nid_postfix(LibcException::ExceptionObject* self);
 const char* APS5_VABI _ZNKSt8ios_base7failure4whatEv_nid_postfix(const LibcException::ExceptionObject* self);
+void APS5_VABI _ZNSt8ios_base7failureC1EPKcRKSt10error_code_nid_postfix(LibcException::SystemErrorObject* self, const char* message, const LibcException::ErrorCode* code);
+void APS5_VABI _ZNSt8ios_base7failureC2EPKcRKSt10error_code_nid_postfix(LibcException::SystemErrorObject* self, const char* message, const LibcException::ErrorCode* code);
+void APS5_VABI _ZNSt8ios_base7failureC1ERKS0__nid_postfix(LibcException::SystemErrorObject* self, const LibcException::SystemErrorObject* source);
 _Unwind_Word APS5_VABI _Unwind_GetGR_nid_postfix(_Unwind_Context* context, int index);
 void APS5_VABI _Unwind_SetGR_nid_postfix(_Unwind_Context* context, int index, _Unwind_Word value);
 _Unwind_Ptr APS5_VABI _Unwind_GetIP_nid_postfix(_Unwind_Context* context);

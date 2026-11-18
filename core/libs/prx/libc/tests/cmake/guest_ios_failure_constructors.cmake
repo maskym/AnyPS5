@@ -1,0 +1,10 @@
+add_test_executable(guest_ios_failure_constructors_tests ${LIBS_INCLUDE_DIR}/tests/GuestIosFailureConstructors.cpp)
+target_include_directories(guest_ios_failure_constructors_tests PRIVATE ${LIBS_INCLUDE_DIR})
+target_link_libraries(guest_ios_failure_constructors_tests PRIVATE libc)
+configure_windows_unwind(guest_ios_failure_constructors_tests)
+add_test(NAME guest_ios_failure_constructors COMMAND guest_ios_failure_constructors_tests)
+set_tests_properties(guest_ios_failure_constructors PROPERTIES TIMEOUT 10)
+if(WIN32)
+    set_tests_properties(guest_ios_failure_constructors PROPERTIES ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>")
+endif()

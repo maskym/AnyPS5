@@ -647,6 +647,18 @@ void APS5_VABI _ZNSt8ios_base7failureD1Ev_nid_postfix(LibcException::ExceptionOb
 void APS5_VABI _ZNSt8ios_base7failureD2Ev_nid_postfix(LibcException::ExceptionObject* self) { LibcException::DestroyMessage(self); }
 void APS5_VABI _ZNSt8ios_base7failureD0Ev_nid_postfix(LibcException::ExceptionObject* self) { LibcException::DeleteMessage(self); }
 const char* APS5_VABI _ZNKSt8ios_base7failure4whatEv_nid_postfix(const LibcException::ExceptionObject* self) { return LibcException::MessageWhat(self); }
+void APS5_VABI _ZNSt8ios_base7failureC1EPKcRKSt10error_code_nid_postfix(LibcException::SystemErrorObject* self, const char* message, const LibcException::ErrorCode* code) {
+    if (!code) throw std::invalid_argument(std::string(__func__) + ": null error_code");
+    LibcExceptionConstructSystemError_nid_no_patch(self, *code, message);
+    self->base.vtable = &_ZTVNSt8ios_base7failureE_nid_postfix.destroy;
+}
+void APS5_VABI _ZNSt8ios_base7failureC2EPKcRKSt10error_code_nid_postfix(LibcException::SystemErrorObject* self, const char* message, const LibcException::ErrorCode* code) {
+    _ZNSt8ios_base7failureC1EPKcRKSt10error_code_nid_postfix(self, message, code);
+}
+void APS5_VABI _ZNSt8ios_base7failureC1ERKS0__nid_postfix(LibcException::SystemErrorObject* self, const LibcException::SystemErrorObject* source) {
+    LibcException::Copy(&self->base, &source->base, _ZTVNSt8ios_base7failureE_nid_postfix);
+    self->code = source->code;
+}
 
 [[noreturn]] void APS5_VABI __cxa_bad_cast_nid_postfix() { LibcException::ThrowPlain(_ZTVSt8bad_cast_nid_postfix); }
 [[noreturn]] void APS5_VABI __cxa_bad_typeid_nid_postfix() { LibcException::ThrowPlain(_ZTVSt10bad_typeid_nid_postfix); }

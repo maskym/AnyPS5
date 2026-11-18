@@ -2444,7 +2444,12 @@ std::int64_t APS5_VABI sendmsg_nid_postfix(int descriptor, const GuestMsghdr* me
     if (!Lookup(descriptor)) return -1;
     const bool control = header.control && header.controlLength;
 #ifdef _WIN32
-    if (control) throw std::runtime_error("sendmsg: control data is not supported on Windows");
+    if (control) {
+        if (header.controlLength < 12 || header.controlLength > 2048) return Fail(22);
+        std::vector<unsigned char> controlCopy(header.controlLength);
+        if (!ReadGuest(controlCopy.data(), header.control, controlCopy.size())) return Fail(14);
+        throw std::runtime_error("sendmsg: control data is not supported on Windows");
+    }
 #else
     std::shared_ptr<Socket> passing;
     if (control) {

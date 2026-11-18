@@ -354,6 +354,49 @@ void CheckWideConstructors() {
     Require(live == allocated - 1, "the wide vtable deletes the facet");
 }
 
+using GetcatExport = std::size_t (APS5_VABI *)(Facet** facet, const GuestLocale::Implementation* const* locale);
+
+void CheckGetcat(GetcatExport getcat, const void* vtable) {
+    GuestLocale::Implementation c{{nullptr, 0, 0}, nullptr, 0, 0, false, "C"};
+    const GuestLocale::Implementation* locale = &c;
+    const long before = live;
+    Facet* slot = nullptr;
+    Require(getcat(&slot, &locale) == 6, "_Getcat returns _X_MESSAGES");
+    Require(slot != nullptr && live == before + 1, "_Getcat allocates a facet for an empty slot");
+    Require(slot->vtable == vtable && slot->references == 0 && slot->reserved == 0, "_Getcat builds the facet with no references");
+    slot->vtable->deleteObject(slot);
+    Require(live == before, "the facet _Getcat builds is deleted through its vtable");
+
+    Facet existing{nullptr, 0, 0};
+    slot = &existing;
+    Require(getcat(&slot, &locale) == 6 && slot == &existing && live == before, "_Getcat keeps a facet already in the slot");
+    Require(getcat(nullptr, &locale) == 6 && live == before, "_Getcat without a slot only returns the category");
+    Require(getcat(nullptr, nullptr) == 6 && live == before, "_Getcat without a slot does not read the locale");
+
+    slot = nullptr;
+    GuestLocale::Implementation posix = c;
+    posix.name = "POSIX";
+    const GuestLocale::Implementation* refused = &posix;
+    Require(Throws([&] { getcat(&slot, &refused); }), "_Getcat refuses a name _Locinfo refuses");
+    Require(slot == nullptr && live == before, "a refused _Getcat frees the facet it allocated");
+    const GuestLocale::Implementation* none = nullptr;
+    Require(Throws([&] { getcat(&slot, &none); }), "_Getcat refuses a locale without an implementation");
+    Require(Throws([&] { getcat(&slot, nullptr); }), "_Getcat refuses a null locale");
+    posix.name = nullptr;
+    Require(Throws([&] { getcat(&slot, &refused); }), "_Getcat refuses a locale without a name");
+    Require(slot == nullptr && live == before, "a refused _Getcat leaves the slot empty and frees its facet");
+}
+
+void CheckGetcats() {
+    CheckGetcat(_ZNSt8messagesIcE7_GetcatEPPKNSt6locale5facetEPKS1__nid_postfix, &_ZTVSt8messagesIcE_nid_postfix[2]);
+    FacetStorage wide = Filled();
+    _ZNSt8messagesIwEC2Em_nid_postfix(wide.bytes, 0);
+    const void* vtable = nullptr;
+    std::memcpy(&vtable, wide.bytes, sizeof(vtable));
+    Require(vtable != &_ZTVSt8messagesIcE_nid_postfix[2], "messages<wchar_t>::_Getcat has its own vtable");
+    CheckGetcat(_ZNSt8messagesIwE7_GetcatEPPKNSt6locale5facetEPKS1__nid_postfix, vtable);
+}
+
 }
 
 int main() {
@@ -370,6 +413,7 @@ int main() {
     CheckExportedVtable();
     CheckNarrowConstructors();
     CheckWideConstructors();
+    CheckGetcats();
     Require(live == before, "every copy is released");
     std::puts("libc internal messages: ok");
     return 0;

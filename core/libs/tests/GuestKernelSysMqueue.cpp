@@ -309,11 +309,94 @@ void BadPointers() {
     Require(close_nid_postfix(queue) == 0 && kmq_unlink_nid_postfix(name.c_str()) == 0);
 }
 
+class GuardedPage {
+public:
+    GuardedPage() {
+#ifdef _WIN32
+        SYSTEM_INFO info{};
+        GetSystemInfo(&info);
+        size = info.dwPageSize;
+        memory = static_cast<char*>(VirtualAlloc(nullptr, size * 2, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+        Require(memory != nullptr);
+        DWORD previous = 0;
+        Require(VirtualProtect(memory + size, size, PAGE_NOACCESS, &previous) != 0);
+#else
+        const long pageSize = sysconf(_SC_PAGESIZE);
+        Require(pageSize > 0);
+        size = static_cast<std::size_t>(pageSize);
+        memory = static_cast<char*>(mmap(nullptr, size * 2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+        Require(memory != MAP_FAILED);
+        Require(mprotect(memory + size, size, PROT_NONE) == 0);
+#endif
+    }
+
+    ~GuardedPage() {
+#ifdef _WIN32
+        VirtualFree(memory, 0, MEM_RELEASE);
+#else
+        munmap(memory, size * 2);
+#endif
+    }
+
+    GuardedPage(const GuardedPage&) = delete;
+    GuardedPage& operator=(const GuardedPage&) = delete;
+
+    char* End() const { return memory + size; }
+
+private:
+    char* memory = nullptr;
+    std::size_t size = 0;
+};
+
+void BadInputs() {
+    UnreadablePage page;
+    const void* const bad[] = {reinterpret_cast<const void*>(0x10), page.Address()};
+    const auto name = Name("badinputs");
+    const GuestMqAttr small{0, 3, 16, 0, {}};
+    const int queue = kmq_open_nid_postfix(name.c_str(), ORdwr | OCreat, 0600, &small);
+    Require(queue >= 0);
+    char buffer[16]{};
+    unsigned priority = 0;
+    GuestMqAttr attributes{};
+    for (const void* pointer : bad) {
+        const auto badName = static_cast<const char*>(pointer);
+        const auto badTime = static_cast<const GuestTimespec*>(pointer);
+        Require(kmq_open_nid_postfix(badName, ORdwr | OCreat, 0600, nullptr) == -1 && Error() == Efault);
+        Require(kmq_unlink_nid_postfix(badName) == -1 && Error() == Efault);
+        Require(kmq_timedsend_nid_postfix(queue, badName, 3, 1, nullptr) == -1 && Error() == Efault);
+        Require(kmq_setattr_nid_postfix(queue, nullptr, &attributes) == 0 && attributes.curmsgs == 0);
+        Require(kmq_timedsend_nid_postfix(queue, "ok", 2, 0, badTime) == -1 && Error() == Efault);
+        Require(kmq_setattr_nid_postfix(queue, nullptr, &attributes) == 0 && attributes.curmsgs == 0);
+        Require(kmq_timedsend_nid_postfix(queue, "ok", 2, 0, nullptr) == 0);
+        Require(kmq_timedreceive_nid_postfix(queue, buffer, sizeof(buffer), &priority, badTime) == -1 && Error() == Efault);
+        Require(Receive(queue, &priority) == "ok" && priority == 0);
+        Require(kmq_timedsend_nid_postfix(queue, "0123456789abcdefg", 17, 0, badTime) == -1 && Error() == Efault);
+        Require(kmq_timedsend_nid_postfix(queue, badName, 3, 64, nullptr) == -1 && Error() == Einval);
+    }
+    const auto badTime = static_cast<const GuestTimespec*>(bad[1]);
+    const auto closedName = Name("badclosed");
+    const int closed = kmq_open_nid_postfix(closedName.c_str(), ORdwr | OCreat, 0600, &small);
+    Require(closed >= 0 && close_nid_postfix(closed) == 0);
+    for (const int descriptor : {-1, closed}) {
+        Require(kmq_timedsend_nid_postfix(descriptor, "a", 1, 0, badTime) == -1 && Error() == Ebadf);
+        Require(kmq_timedreceive_nid_postfix(descriptor, buffer, sizeof(buffer), &priority, badTime) == -1 && Error() == Ebadf);
+    }
+    Require(kmq_unlink_nid_postfix(closedName.c_str()) == 0);
+    GuardedPage guarded;
+    char* const edge = guarded.End() - 3;
+    std::memcpy(edge, "/x", 3);
+    const int boundary = kmq_open_nid_postfix(edge, ORdwr | OCreat, 0600, nullptr);
+    Require(boundary >= 0 && close_nid_postfix(boundary) == 0);
+    Require(kmq_unlink_nid_postfix(edge) == 0);
+    Require(close_nid_postfix(queue) == 0 && kmq_unlink_nid_postfix(name.c_str()) == 0);
+}
+
 }
 
 int main() {
     OpenRules();
     BadPointers();
+    BadInputs();
     Messages();
     Waiting();
     Access();

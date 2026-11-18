@@ -108,6 +108,16 @@ class FoldTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("no debt file for libSceMissing", error)
 
+    def test_refuses_a_library_name_in_another_case(self):
+        self.fragment("a", "# libsceexample\n\n## remove [sceExampleC]\n")
+        code, _, error = self.run_fold()
+        self.assertEqual(code, 1)
+        self.assertIn("no debt file for libsceexample", error)
+        self.assertEqual(self.debt(), BASE)
+        self.assertEqual(self.run_fold("--check")[0], 1)
+        self.assertEqual(self.run_fold("--show", "libsceexample")[0], 1)
+        self.assertTrue((self.root / "docs/dev/debt/changes/a.md").is_file())
+
     def test_check_and_show_leave_the_files(self):
         self.fragment("a", "# libSceExample\n\n## remove [sceExampleB]\n")
         self.assertEqual(self.run_fold("--check")[0], 0)

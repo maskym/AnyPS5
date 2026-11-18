@@ -1,4 +1,5 @@
 import argparse
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -23,6 +24,10 @@ def debt_file(library):
     return DEBT if library == Path(DEBT).stem else f"{DEBT_DIR}{library}.md"
 
 
+def exists(path):
+    return path.is_file() and path.name in os.listdir(path.parent)
+
+
 @dataclass
 class Operation:
     fragment: str
@@ -43,7 +48,7 @@ def parse(path, root):
                 target_file = debt_file(library)
             except FoldError as error:
                 raise FoldError(f"{name}:{number}: {error}") from error
-            if not (root / target_file).is_file():
+            if not exists(root / target_file):
                 raise FoldError(f"{name}:{number}: no debt file for {library}")
         elif match := OPERATION.fullmatch(line.strip()):
             if library is None:
@@ -172,7 +177,7 @@ def main(argv=None):
         return 1
     if target is not None:
         path = args.root / target
-        if not path.is_file():
+        if not exists(path):
             print(f"no debt file for {args.show}", file=sys.stderr)
             return 1
         sys.stdout.write(texts.get(args.show, path.read_text(encoding="utf-8")))

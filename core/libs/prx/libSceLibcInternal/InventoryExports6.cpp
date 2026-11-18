@@ -340,12 +340,6 @@ void APS5_VABI sceLibcInternalUnknown6_090_Oeo9tUbzW7s_nid_no_patch(void* self) 
 }
 APS5_EXPORT("Oeo9tUbzW7s", sceLibcInternalUnknown6_090_Oeo9tUbzW7s_nid_no_patch);
 
-int APS5_VABI sceLibcInternalUnknown6_092_dmMOtyu8GAk_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-APS5_EXPORT("d-MOtyu8GAk", sceLibcInternalUnknown6_092_dmMOtyu8GAk_nid_no_patch);
-
 void APS5_VABI sceLibcInternalUnknown6_093_R2QKo3hBLkw_nid_no_patch(int* locks) {
     (void)locks;
 }

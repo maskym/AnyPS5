@@ -2,10 +2,17 @@
 
 #include "prx/libc/include/GuestLocale.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include <cstddef>
 #include <cstdint>
 
 extern "C" {
 
+void APS5_VABI _ZNSt7collateIwEC1Em_nid_postfix(GuestLocale::CollateFacet* self, std::size_t references);
+void APS5_VABI _ZNSt7collateIwEC2Em_nid_postfix(GuestLocale::CollateFacet* self, std::size_t references);
+void APS5_VABI _ZNSt7collateIwEC1EPKcm_nid_postfix(GuestLocale::CollateFacet* self, const char* localeName, std::size_t references);
+void APS5_VABI _ZNSt7collateIwEC2EPKcm_nid_postfix(GuestLocale::CollateFacet* self, const char* localeName, std::size_t references);
+void APS5_VABI _ZNSt7collateIwEC1ERKSt8_Locinfom_nid_postfix(GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references);
+void APS5_VABI _ZNSt7collateIwEC2ERKSt8_Locinfom_nid_postfix(GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references);
 int APS5_VABI sceLibcInternalWideCollateDoCompare_nid_no_patch(const GuestLocale::CollateFacet* self, const char16_t* first1, const char16_t* last1, const char16_t* first2, const char16_t* last2);
 GuestLocale::String* APS5_VABI sceLibcInternalWideCollateDoTransform_nid_no_patch(GuestLocale::String* result, const GuestLocale::CollateFacet* self, const char16_t* first, const char16_t* last);
 std::int64_t APS5_VABI sceLibcInternalWideCollateDoHash_nid_no_patch(const GuestLocale::CollateFacet* self, const char16_t* first, const char16_t* last);

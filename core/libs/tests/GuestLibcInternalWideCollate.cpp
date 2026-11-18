@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <initializer_list>
 #include <string>
 
 extern "C" {
@@ -162,6 +163,91 @@ void CheckVirtualDispatch(const GuestLocale::CollateFacet* classic) {
     Require(Throws([&] { sceLibcInternalWideCollateTransform_nid_no_patch(&result, &empty, left.data(), left.data() + 3); }), "transform rejects a missing facet");
 }
 
+struct alignas(8) Storage {
+    std::array<unsigned char, sizeof(GuestLocale::CollateFacet)> bytes;
+};
+
+Storage Sentinel() {
+    Storage storage;
+    storage.bytes.fill(0xa5);
+    return storage;
+}
+
+GuestLocale::CollateFacet* Facet(Storage& storage) {
+    return reinterpret_cast<GuestLocale::CollateFacet*>(storage.bytes.data());
+}
+
+bool Untouched(const Storage& storage) {
+    for (unsigned char byte : storage.bytes) {
+        if (byte != 0xa5) return false;
+    }
+    return true;
+}
+
+void CheckConstructed(const GuestLocale::CollateFacet* facet, std::uint64_t references) {
+    Require(facet->base.vtable == &GuestWideCollateVtable_nid_no_patch()->facet, "the constructor installs the wide collate vtable");
+    Require(facet->base.references == static_cast<std::uint32_t>(references), "the constructor writes the low 32 bits of the references");
+    Require(facet->base.reserved == static_cast<std::uint32_t>(references >> 32), "the constructor writes the high 32 bits of the references");
+    Require(facet->collation == nullptr && facet->wideCollation == nullptr, "the constructor zeroes the collation pointers");
+}
+
+void CheckConstructors() {
+    GuestLocale::LocinfoStorage locinfo{};
+    _ZNSt8_LocinfoC1EPKc_nid_postfix(&locinfo, "C");
+    const GuestLocale::LocinfoStorage snapshot = locinfo;
+
+    using Construct = void (*)(GuestLocale::CollateFacet*, const GuestLocale::LocinfoStorage*, std::size_t);
+    const std::array<Construct, 6> constructors{
+        [](GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage*, std::size_t references) { _ZNSt7collateIwEC1Em_nid_postfix(self, references); },
+        [](GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage*, std::size_t references) { _ZNSt7collateIwEC2Em_nid_postfix(self, references); },
+        [](GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage*, std::size_t references) { _ZNSt7collateIwEC1EPKcm_nid_postfix(self, "C", references); },
+        [](GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage*, std::size_t references) { _ZNSt7collateIwEC2EPKcm_nid_postfix(self, "C", references); },
+        [](GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage* borrowed, std::size_t references) { _ZNSt7collateIwEC1ERKSt8_Locinfom_nid_postfix(self, borrowed, references); },
+        [](GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage* borrowed, std::size_t references) { _ZNSt7collateIwEC2ERKSt8_Locinfom_nid_postfix(self, borrowed, references); },
+    };
+    for (Construct construct : constructors) {
+        for (std::uint64_t references : {0ull, 1ull, 0x100000002ull}) {
+            Storage storage = Sentinel();
+            construct(Facet(storage), &locinfo, references);
+            CheckConstructed(Facet(storage), references);
+            Require(std::memcmp(&locinfo, &snapshot, sizeof(locinfo)) == 0, "the constructors leave the borrowed _Locinfo unchanged");
+        }
+        Require(Throws([&] { construct(nullptr, &locinfo, 0); }), "every constructor rejects a null object");
+    }
+    Storage split = Sentinel();
+    _ZNSt7collateIwEC1Em_nid_postfix(Facet(split), 0x100000002ull);
+    Require(Facet(split)->base.references == 2 && Facet(split)->base.reserved == 1, "the constructor splits 64-bit references");
+
+    Storage constructed = Sentinel();
+    _ZNSt7collateIwEC1EPKcm_nid_postfix(Facet(constructed), "C", 0);
+    Require(Compare(Facet(constructed), u"abc", u"abd") == DoCompare(Facet(constructed), u"abc", u"abd") && Compare(Facet(constructed), u"abc", u"abd") == -1, "compare through a constructed facet matches do_compare");
+    Require(Hash(Facet(constructed), u"abc") == DoHash(Facet(constructed), u"abc") && Hash(Facet(constructed), u"abd") == DoHash(Facet(constructed), u"abd"), "hash through a constructed facet matches do_hash");
+
+    auto* heap = static_cast<GuestLocale::CollateFacet*>(_Znwm_nid_postfix(sizeof(GuestLocale::CollateFacet)));
+    Require(heap != nullptr, "the guest heap allocates a facet");
+    _ZNSt7collateIwEC2ERKSt8_Locinfom_nid_postfix(heap, &locinfo, 1);
+    CheckConstructed(heap, 1);
+    Require(Compare(heap, u"abd", u"abc") == 1, "compare works through a heap facet");
+    _ZdlPv_nid_postfix(heap);
+
+    Storage untouched = Sentinel();
+    Require(Throws([&] { _ZNSt7collateIwEC1ERKSt8_Locinfom_nid_postfix(Facet(untouched), nullptr, 1); }), "C1(_Locinfo) rejects a null _Locinfo");
+    Require(Throws([&] { _ZNSt7collateIwEC2ERKSt8_Locinfom_nid_postfix(Facet(untouched), nullptr, 1); }), "C2(_Locinfo) rejects a null _Locinfo");
+    Require(Untouched(untouched), "a null _Locinfo leaves the facet storage untouched");
+
+    for (const char* name : {"fr_FR.UTF-8", ""}) {
+        Storage first = Sentinel();
+        Require(Throws([&] { _ZNSt7collateIwEC1EPKcm_nid_postfix(Facet(first), name, 1); }), "C1(const char*) rejects an unsupported locale");
+        Require(Untouched(first), "a rejected C1 locale leaves the facet storage untouched");
+        Storage second = Sentinel();
+        Require(Throws([&] { _ZNSt7collateIwEC2EPKcm_nid_postfix(Facet(second), name, 1); }), "C2(const char*) rejects an unsupported locale");
+        Require(Untouched(second), "a rejected C2 locale leaves the facet storage untouched");
+    }
+
+    Require(std::memcmp(&locinfo, &snapshot, sizeof(locinfo)) == 0, "the borrowed _Locinfo stays byte-identical");
+    _ZNSt8_LocinfoD1Ev_nid_postfix(&locinfo);
+}
+
 }
 
 int main() {
@@ -175,6 +261,7 @@ int main() {
 
     CheckClassicFacet(classic);
     CheckVirtualDispatch(classic);
+    CheckConstructors();
     reinterpret_cast<const GuestLocale::CollateVtable*>(facet->vtable)->facet.deleteObject(facet);
 
     std::puts("libc internal collate<wchar_t> member checks passed");

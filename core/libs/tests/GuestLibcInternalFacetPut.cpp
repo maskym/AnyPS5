@@ -223,6 +223,95 @@ void CheckLibcNumPut() {
     facet->vtable->deleteObject(facet);
 }
 
+using IputExport = GuestLocale::OutputIterator (APS5_VABI*)(const GuestLocale::Facet*, GuestLocale::OutputIterator, GuestLocale::IosBase*, char, char*, std::size_t);
+using FputExport = GuestLocale::OutputIterator (APS5_VABI*)(const GuestLocale::Facet*, GuestLocale::OutputIterator, GuestLocale::IosBase*, char, const char*, std::size_t);
+
+template<typename TExport>
+std::string PutFormatted(const char* nid, const GuestLocale::Facet* facet, std::int32_t flags, std::int32_t width, std::string digits, std::size_t count) {
+    GuestLocale::IosBase ios{};
+    ios.flags = flags;
+    ios.precision = 6;
+    ios.width = width;
+    ios.locale = &_ZSt21_sceLibcClassicLocale_nid_postfix;
+    auto stream = MakeStream(64);
+    const GuestLocale::OutputIterator out = Export<TExport>(nid)(facet, GuestLocale::OutputIterator{false, &stream.buffer}, &ios, '*', digits.data(), count);
+    Require(!out.failed && out.buffer == &stream.buffer, "_Iput and _Fput return the output iterator");
+    Require(ios.width == 0, "_Iput and _Fput reset the stream width");
+    return stream.accepted;
+}
+
+std::string PutIput(const GuestLocale::Facet* facet, std::int32_t flags, std::int32_t width, const std::string& digits) {
+    return PutFormatted<IputExport>("jykT-VWQVBY", facet, flags, width, digits, digits.size());
+}
+
+std::string PutFput(const GuestLocale::Facet* facet, std::int32_t flags, std::int32_t width, const std::string& digits) {
+    return PutFormatted<FputExport>("ll99KkqO6ig", facet, flags, width, digits, digits.size());
+}
+
+std::string HostIntegerDigits(std::int32_t flags, std::int64_t value) {
+    const std::int32_t base = flags & 0x70;
+    const char conversion = base == 0x20 ? 'o' : base != 0x40 ? 'd' : (flags & 0x200) != 0 ? 'X' : 'x';
+    const std::string format = std::string("%") + ((flags & 0x400) != 0 ? "+" : "") + ((flags & 0x80) != 0 ? "#" : "") + "ll" + conversion;
+    char digits[64];
+    const int count = std::snprintf(digits, sizeof(digits), format.c_str(), static_cast<long long>(value));
+    return std::string(digits, static_cast<std::size_t>(count));
+}
+
+void CheckIputAgreesWithDoPut(GuestLocale::Facet* facet, std::int32_t flags, std::int32_t width, std::int64_t value) {
+    const std::string direct = PutLibcNumber(facet, flags, width, value);
+    Require(PutIput(facet, flags, width, HostIntegerDigits(flags, value)) == direct, "_Iput writes the same field as num_put::do_put for the digits do_put formats");
+}
+
+void CheckNumPutIput() {
+    const GuestLocale::Implementation* locale = _ZSt21_sceLibcClassicLocale_nid_postfix;
+    GuestLocale::Facet* facet = nullptr;
+    Require(_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE7_GetcatEPPKNSt6locale5facetEPKS5__nid_postfix(&facet, &locale) == 4 && facet != nullptr, "num_put<char>::_Getcat creates the facet");
+    Require(PutIput(facet, 0x8, 6, "-42") == "-***42", "_Iput fills after the sign under internal adjustment");
+    Require(PutIput(facet, 0x48, 7, "0x1f") == "0x***1f", "_Iput fills after the 0x prefix of a hexadecimal field");
+    Require(PutIput(facet, 0x18, 7, "0x1f") == "***0x1f", "_Iput keeps 0x with the digits outside the hexadecimal base");
+    Require(PutIput(facet, 0x48, 8, "-0X1F") == "-0X***1F", "_Iput fills after the sign and the 0X prefix");
+    Require(PutIput(facet, 0x2, 6, "42") == "42****", "_Iput fills after the digits under left adjustment");
+    Require(PutIput(facet, 0, 4, "+7") == "**+7", "_Iput fills before the field under right adjustment");
+    Require(PutIput(facet, 0x8, 2, "-123") == "-123", "_Iput does not truncate a field wider than the stream width");
+    Require(PutIput(facet, 0, 0, "") == "", "_Iput writes nothing for no digits");
+    Require(PutFormatted<IputExport>("jykT-VWQVBY", facet, 0, 0, "12345", 3) == "123", "_Iput writes only the counted digits");
+    CheckIputAgreesWithDoPut(facet, 0, 6, -42);
+    CheckIputAgreesWithDoPut(facet, 0x2c8, 8, 255);
+    CheckIputAgreesWithDoPut(facet, 0x408, 7, 42);
+    CheckIputAgreesWithDoPut(facet, 0xa0, 6, 8);
+    CheckIputAgreesWithDoPut(facet, 0x42, 9, 0x7fff);
+    CheckIputAgreesWithDoPut(facet, 0x10, 0, std::numeric_limits<std::int64_t>::min());
+    facet->vtable->deleteObject(facet);
+}
+
+std::string PutLibcDouble(GuestLocale::Facet* facet, std::int32_t flags, std::int32_t width, double value) {
+    GuestLocale::IosBase ios{};
+    ios.flags = flags;
+    ios.precision = 6;
+    ios.width = width;
+    ios.locale = &_ZSt21_sceLibcClassicLocale_nid_postfix;
+    auto stream = MakeStream(64);
+    const GuestLocale::OutputIterator out = Export<NumPutExport<double>>("w9NzCYAjEpQ")(facet, GuestLocale::OutputIterator{false, &stream.buffer}, &ios, '*', value);
+    Require(!out.failed && ios.width == 0, "the libc num_put facet writes the floating field");
+    return stream.accepted;
+}
+
+void CheckNumPutFput() {
+    const GuestLocale::Implementation* locale = _ZSt21_sceLibcClassicLocale_nid_postfix;
+    GuestLocale::Facet* facet = nullptr;
+    Require(_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE7_GetcatEPPKNSt6locale5facetEPKS5__nid_postfix(&facet, &locale) == 4 && facet != nullptr, "num_put<char>::_Getcat creates the facet");
+    Require(PutFput(facet, 0x8, 7, "-1.5") == "-***1.5", "_Fput fills after the sign under internal adjustment");
+    Require(PutFput(facet, 0, 7, "1.5e+10") == "1.5e+10", "_Fput writes a field as wide as the stream width unpadded");
+    Require(PutFput(facet, 0x8, 6, "-inf") == "-**inf", "_Fput fills after the sign of an infinity");
+    Require(PutFput(facet, 0, 5, "nan") == "**nan", "_Fput fills before a NaN under right adjustment");
+    Require(PutFput(facet, 0x1808, 9, "0x1p+0") == "0x***1p+0", "_Fput keeps 0x in front of the fill of a hexadecimal float");
+    Require(PutFput(facet, 0x2, 6, "2.25") == "2.25**", "_Fput fills after the digits under left adjustment");
+    char digits[64];
+    const int count = std::snprintf(digits, sizeof(digits), "%.*g", 6, -2.5);
+    Require(PutFput(facet, 0x8, 8, std::string(digits, static_cast<std::size_t>(count))) == PutLibcDouble(facet, 0x8, 8, -2.5), "_Fput writes the same field as num_put::do_put for the digits do_put formats");
+    facet->vtable->deleteObject(facet);
+}
+
 struct TimeCall {
     const GuestLocale::Facet* self;
     GuestLocale::IosBase* stream;
@@ -657,6 +746,8 @@ int main(int argc, char** argv) {
 
     CheckNumPutForwarding();
     CheckLibcNumPut();
+    CheckNumPutIput();
+    CheckNumPutFput();
     CheckTimePutForwarding();
     CheckPatternWalk();
     CheckStreamCtype();

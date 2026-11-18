@@ -54,6 +54,16 @@ GuestLocale::OutputIterator APS5_VABI sceLibcInternalNumPutUnsignedLongLong_nid_
 }
 APS5_EXPORT("dep6W2Ix35s", sceLibcInternalNumPutUnsignedLongLong_nid_no_patch);
 
+GuestLocale::OutputIterator APS5_VABI sceLibcInternalNumPutIput_nid_no_patch(const GuestLocale::Facet*, GuestLocale::OutputIterator out, GuestLocale::IosBase* stream, char fill, char* digits, std::size_t count) {
+    return LibcNumPutInteger_nid_no_patch(out, stream, fill, digits, count);
+}
+APS5_EXPORT("jykT-VWQVBY", sceLibcInternalNumPutIput_nid_no_patch);
+
+GuestLocale::OutputIterator APS5_VABI sceLibcInternalNumPutFput_nid_no_patch(const GuestLocale::Facet*, GuestLocale::OutputIterator out, GuestLocale::IosBase* stream, char fill, const char* digits, std::size_t count) {
+    return LibcNumPutFloating_nid_no_patch(out, stream, fill, digits, count);
+}
+APS5_EXPORT("ll99KkqO6ig", sceLibcInternalNumPutFput_nid_no_patch);
+
 GuestLocale::OutputIterator APS5_VABI sceLibcInternalTimePutPattern_nid_no_patch(const GuestLocale::Facet* self, GuestLocale::OutputIterator out, GuestLocale::IosBase* stream, char fill, const GuestTm* time, const char* first, const char* last) {
     return LibcTimePutPattern_nid_no_patch(self, out, stream, fill, time, first, last);
 }

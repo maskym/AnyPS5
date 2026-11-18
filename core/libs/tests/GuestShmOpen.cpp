@@ -46,9 +46,7 @@ int main() {
     std::memcpy(&function, &executable, sizeof(function));
     Require(function() == 42);
     Require(munmap_nid_postfix(executable, 0x4000) == 0);
-#ifndef _WIN32
     Require(pwrite_nid_disambig1_nid_postfix(third, text, sizeof(text), 0) == 0);
-#endif
     const unsigned char privateCode[] = {0xb8, 0x07, 0, 0, 0, 0xc3};
     Require(pwrite_nid_disambig1_nid_postfix(first, privateCode, sizeof(privateCode), 0x3000) == static_cast<std::int64_t>(sizeof(privateCode)));
     auto* copy = static_cast<volatile char*>(mmap_nid_postfix(nullptr, 0x4000, 3, 0x2, first, 0));

@@ -1,0 +1,12 @@
+if(BUILD_TESTING)
+    add_test_executable(guest_kernel_fcntl_kqueue_tests ${LIBS_INCLUDE_DIR}/tests/GuestKernelFcntlKqueue.cpp)
+    target_include_directories(guest_kernel_fcntl_kqueue_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    target_link_libraries(guest_kernel_fcntl_kqueue_tests PRIVATE libkernel libc)
+    configure_windows_unwind(guest_kernel_fcntl_kqueue_tests)
+    add_test(NAME guest_kernel_fcntl_kqueue COMMAND guest_kernel_fcntl_kqueue_tests)
+    set_tests_properties(guest_kernel_fcntl_kqueue PROPERTIES TIMEOUT 15)
+    if(WIN32)
+        set_tests_properties(guest_kernel_fcntl_kqueue PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libkernel>")
+    endif()
+endif()

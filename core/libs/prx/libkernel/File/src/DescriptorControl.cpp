@@ -405,6 +405,15 @@ int ChangeStatus(int fd, Kind kind, int mask, int value, const char* function) {
     return 0;
 }
 
+int RecordStatusThenFail(int fd, int value, int error) {
+    {
+        std::lock_guard lock(g_mutex);
+        auto& status = *Materialize(fd).status;
+        status = (status & ~SettableStatusFlags) | (value & SettableStatusFlags);
+    }
+    return Fail(error);
+}
+
 int CurrentStatus(int fd) {
     std::lock_guard lock(g_mutex);
     return *Materialize(fd).status;
@@ -535,12 +544,13 @@ int Fcntl(int fd, int command, std::intptr_t argument) {
             return 0;
         case GetStatusFlags: {
             if (!Classify(fd, "fcntl")) return Fail(GuestEbadf);
-            const int access = CreatedByPipe(fd) ? ReadWrite : AccessMode(fd, "fcntl");
+            const int access = CreatedByPipe(fd) || IsKqueueDescriptor_nid_no_patch(fd) || IsKsemDescriptor(fd) ? ReadWrite : AccessMode(fd, "fcntl");
             return access | CurrentStatus(fd);
         }
         case SetStatusFlags: {
             const auto kind = Classify(fd, "fcntl");
             if (!kind) return Fail(GuestEbadf);
+            if (IsKqueueDescriptor_nid_no_patch(fd) || IsKsemDescriptor(fd)) return RecordStatusThenFail(fd, static_cast<int>(argument), GuestEnotty);
             return ChangeStatus(fd, *kind, SettableStatusFlags, static_cast<int>(argument), "fcntl");
         }
         case GetOwner:

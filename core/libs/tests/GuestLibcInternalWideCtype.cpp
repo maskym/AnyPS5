@@ -9,7 +9,9 @@
 #include <stdexcept>
 #include <new>
 #include <vector>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -49,17 +51,29 @@ void Capped(TCall call) {
 #endif
 }
 
-#ifndef _WIN32
 class GuardedPage {
 public:
     GuardedPage() {
+#ifdef _WIN32
+        SYSTEM_INFO info{};
+        GetSystemInfo(&info);
+        const std::size_t page = info.dwPageSize;
+        mapping = VirtualAlloc(nullptr, page * 2, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        DWORD previous = 0;
+        if (mapping == nullptr || VirtualProtect(static_cast<unsigned char*>(mapping) + page, page, PAGE_NOACCESS, &previous) == 0) std::abort();
+#else
         const auto page = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
         mapping = mmap(nullptr, page * 2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (mapping == MAP_FAILED || mprotect(static_cast<unsigned char*>(mapping) + page, page, PROT_NONE) != 0) std::abort();
+#endif
         end = static_cast<unsigned char*>(mapping) + page;
         bytes = page * 2;
     }
+#ifdef _WIN32
+    ~GuardedPage() { VirtualFree(mapping, 0, MEM_RELEASE); }
+#else
     ~GuardedPage() { munmap(mapping, bytes); }
+#endif
     template<typename T>
     T* Tail(std::size_t count) const { return reinterpret_cast<T*>(end) - count; }
 
@@ -68,7 +82,6 @@ private:
     unsigned char* end = nullptr;
     std::size_t bytes = 0;
 };
-#endif
 
 constexpr short ClassA = 0x01;
 constexpr short ClassB = 0x02;
@@ -279,7 +292,6 @@ void CheckChunkedRanges(Fixture& first) {
         RequireRejected([&] { sceLibcInternalWideCtypeDoIsRange_nid_no_patch(AsFacet(first), unmapped, unmapped + huge, masks.data()); }, "range classification rejects an oversized unmapped range");
         RequireRejected([&] { sceLibcInternalWideCtypeDoScanNot_nid_no_patch(AsFacet(first), ClassA, unmapped, unmapped + huge); }, "scan_not rejects an oversized unmapped range");
         RequireRejected([&] { sceLibcInternalWideCtypeDoToupperRange_nid_no_patch(AsFacet(first), unmapped, unmapped + huge); }, "range uppercase rejects an oversized unmapped range");
-#ifndef _WIN32
         GuardedPage page;
         auto* text = page.Tail<char16_t>(3);
         text[0] = u'a';
@@ -299,7 +311,6 @@ void CheckChunkedRanges(Fixture& first) {
         text[1] = u'A';
         text[2] = u'A';
         RequireRejected([&] { sceLibcInternalWideCtypeDoScanNot_nid_no_patch(AsFacet(first), ClassA, text, text + huge); }, "scan_not rejects an oversized range of matches before a guard page");
-#endif
     });
     Require(masks == std::array<short, 3>{-1, -1, -1}, "rejected oversized classification writes nothing");
     std::vector<char16_t> text(0x1803);

@@ -9,7 +9,9 @@
 #include <stdexcept>
 #include <new>
 #include <vector>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -49,17 +51,29 @@ void Capped(TCall call) {
 #endif
 }
 
-#ifndef _WIN32
 class GuardedPage {
 public:
     GuardedPage() {
+#ifdef _WIN32
+        SYSTEM_INFO info{};
+        GetSystemInfo(&info);
+        const std::size_t page = info.dwPageSize;
+        mapping = VirtualAlloc(nullptr, page * 2, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        DWORD previous = 0;
+        if (mapping == nullptr || VirtualProtect(static_cast<unsigned char*>(mapping) + page, page, PAGE_NOACCESS, &previous) == 0) std::abort();
+#else
         const auto page = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
         mapping = mmap(nullptr, page * 2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (mapping == MAP_FAILED || mprotect(static_cast<unsigned char*>(mapping) + page, page, PROT_NONE) != 0) std::abort();
+#endif
         end = static_cast<unsigned char*>(mapping) + page;
         bytes = page * 2;
     }
+#ifdef _WIN32
+    ~GuardedPage() { VirtualFree(mapping, 0, MEM_RELEASE); }
+#else
     ~GuardedPage() { munmap(mapping, bytes); }
+#endif
     template<typename T>
     T* Tail(std::size_t count) const { return reinterpret_cast<T*>(end) - count; }
 
@@ -68,7 +82,6 @@ private:
     unsigned char* end = nullptr;
     std::size_t bytes = 0;
 };
-#endif
 
 void Require(bool condition, const char* message) {
     if (condition) return;
@@ -169,13 +182,11 @@ void TestChunkedRanges() {
     Capped([&] {
         RequireRejected([&] { _ZNKSt5ctypeIwE8do_widenEPKcS2_Pw_nid_postfix(nullptr, unmappedBytes, unmappedBytes + huge, wide.data()); }, "widen rejects an oversized unmapped range");
         RequireRejected([&] { _ZNKSt5ctypeIwE9do_narrowEPKwS2_cPc_nid_postfix(nullptr, unmappedWide, unmappedWide + huge, '?', narrow.data()); }, "narrow rejects an oversized unmapped range");
-#ifndef _WIN32
         GuardedPage page;
         auto* bytes = page.Tail<char>(4);
         auto* source = page.Tail<std::uint16_t>(4);
         RequireRejected([&] { _ZNKSt5ctypeIwE8do_widenEPKcS2_Pw_nid_postfix(nullptr, bytes, bytes + huge, wide.data()); }, "widen rejects an oversized range before a guard page");
         RequireRejected([&] { _ZNKSt5ctypeIwE9do_narrowEPKwS2_cPc_nid_postfix(nullptr, source, source + huge, '?', narrow.data()); }, "narrow rejects an oversized range before a guard page");
-#endif
     });
     Require(wide == std::array<std::uint16_t, 4> {1, 2, 3, 4} && narrow == std::array<char, 4> {'1', '2', '3', '4'}, "oversized ranges write nothing");
     std::vector<char> text(0x2345);

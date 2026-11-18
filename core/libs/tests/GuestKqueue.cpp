@@ -1254,7 +1254,7 @@ static void EdgeTriggeredPipeRead() {
 
 #endif
 
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
 static void EdgeTriggeredDispatch() {
     const int kq = kqueue_nid_postfix();
     int pair[2];
@@ -1507,7 +1507,6 @@ static void FileWatch() {
     Require(std::filesystem::remove(path));
 }
 
-#ifndef _WIN32
 static void RenameAndDeleteWatchedFile() {
     const auto path = TemporaryName("moved");
     const auto renamed = path + "-renamed";
@@ -1526,7 +1525,6 @@ static void RenameAndDeleteWatchedFile() {
     Require(close_nid_postfix(file) == 0);
     Require(close_nid_postfix(kq) == 0);
 }
-#endif
 
 #if !defined(_WIN32) && !defined(__APPLE__)
 static std::uint32_t NotesThrough(int kq, std::uintptr_t ident, std::uint32_t last) {
@@ -1943,6 +1941,8 @@ int main(int argc, char** argv) {
 #ifdef __linux__
     EdgeTriggeredSocketWrite();
     SocketWriteLowWaterWhileFilling();
+#endif
+#if defined(__linux__) || defined(_WIN32)
     EdgeTriggeredDispatch();
 #endif
     DisableAndDispatch();
@@ -1952,12 +1952,10 @@ int main(int argc, char** argv) {
     ClearedKqueue();
     ClearedKqueueRechecksTheWatchedCount();
     FileWatch();
-#ifndef _WIN32
     RenameAndDeleteWatchedFile();
     VnodeOneshotWatchStops();
     PeriodicTimerFiresTwice();
     TimerDisableEnableRearm();
-#endif
 #ifdef _WIN32
     RecycleBinDeleteWatchedFile();
 #endif

@@ -7,7 +7,12 @@
 #include <limits>
 #include <source_location>
 #include <stdexcept>
-#ifndef _WIN32
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -92,7 +97,6 @@ void IsoComment() {
     status = 0;
     Require(u_getISOComment_nid_postfix(0x41, nullptr, 1, &status) == 0 && status == Illegal && errno == EDOM);
 
-#ifndef _WIN32
     const auto invalid = reinterpret_cast<void*>(std::uintptr_t{0x10});
     const auto rejects = [&](auto&& call) {
         errno = EDOM;
@@ -108,6 +112,17 @@ void IsoComment() {
     rejects([&] { u_getISOComment_nid_postfix(0x41, reinterpret_cast<char*>(invalid), 2, &status); });
     Require(status == 0);
     rejects([&] { u_getISOComment_nid_postfix(0x41, buffer, 2, reinterpret_cast<std::int32_t*>(invalid)); });
+#ifdef _WIN32
+    SYSTEM_INFO system{};
+    GetSystemInfo(&system);
+    const std::size_t pageSize = system.dwPageSize;
+    Require(pageSize > 0);
+    void* page = VirtualAlloc(nullptr, pageSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    Require(page != nullptr);
+    *static_cast<std::int32_t*>(page) = 0;
+    DWORD previous = 0;
+    Require(VirtualProtect(page, pageSize, PAGE_READONLY, &previous) != 0);
+#else
     const auto pageSize = sysconf(_SC_PAGESIZE);
     Require(pageSize > 0);
     void* page = mmap(nullptr, static_cast<std::size_t>(pageSize), PROT_READ | PROT_WRITE,
@@ -115,9 +130,13 @@ void IsoComment() {
     Require(page != MAP_FAILED);
     *static_cast<std::int32_t*>(page) = 0;
     Require(mprotect(page, static_cast<std::size_t>(pageSize), PROT_READ) == 0);
+#endif
     buffer[0] = 'x';
     rejects([&] { u_getISOComment_nid_postfix(0x41, buffer, 0, static_cast<std::int32_t*>(page)); });
     Require(buffer[0] == 'x' && *static_cast<std::int32_t*>(page) == 0);
+#ifdef _WIN32
+    Require(VirtualFree(page, 0, MEM_RELEASE) != 0);
+#else
     Require(munmap(page, static_cast<std::size_t>(pageSize)) == 0);
 #endif
 }

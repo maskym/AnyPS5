@@ -966,6 +966,23 @@ int APS5_VABI sceKernelDeleteAmprSystemEvent(KernelEqueue eq, int id) {
 }
 
 static int AddDescriptorEvent(KernelEqueue eq, int fd, std::size_t size, void* udata, int16_t filter) {
+    if (const auto watched = FindKqueueDescriptor(fd)) {
+        const auto owner = EqueuePin_nid_postfix(eq);
+        if (!owner) {
+            return SCE_KERNEL_ERROR_EBADF;
+        }
+        if (filter != EVFILT_READ || watched == owner) {
+            return SCE_KERNEL_ERROR_EINVAL;
+        }
+        return AddKqueueReadEvent(owner, watched, static_cast<std::uintptr_t>(fd), EV_ADD, udata);
+    }
+    if (fd == 0 && filter == EVFILT_READ && File::IsHostStream(0)) {
+        const auto owner = EqueuePin_nid_postfix(eq);
+        if (!owner) {
+            return SCE_KERNEL_ERROR_EBADF;
+        }
+        return AddStandardInputReadEvent(owner, EV_ADD, udata);
+    }
     const bool isSocket = GuestSockets::IsOpen(fd);
     std::int64_t available = 0;
     bool eof = false;

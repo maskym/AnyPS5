@@ -195,14 +195,9 @@ bool LowWaterAlwaysMet(const KernelEvent& change) {
 }
 
 int AddStandardInputKnote(const KernelEqueueRef& queue, KernelEvent& change, std::uint16_t flags) {
-    KernelEqueueEvent event{};
-    event.event = change;
-    event.event.flags = flags;
-    event.event.fflags = 0;
-    event.event.data = 0;
     change.fflags = 0;
     change.data = 0;
-    return GuestErrno(queue->AddEvent(event));
+    return GuestErrno(AddStandardInputReadEvent(queue, flags, change.udata));
 }
 
 bool PollEdge(KernelEqueueEvent* e) {
@@ -297,32 +292,9 @@ bool KqueueReaches(const KernelEqueueRef& from, const KernelEqueuePrivate* targe
 }
 
 int AddKqueueKnote(const KernelEqueueRef& queue, const KernelEqueueRef& watched, KernelEvent& change, std::uint16_t flags) {
-    std::lock_guard lock(g_kqueueWatchMutex);
-    std::vector<const KernelEqueuePrivate*> visited;
-    if (KqueueReaches(watched, queue.get(), visited)) {
-        NotImplemented_nid_no_patch("kevent: EVFILT_READ on a kqueue that watches the kqueue being registered on");
-    }
-    KernelEqueueEvent event{};
-    event.event = change;
-    event.event.flags = flags;
-    event.event.fflags = 0;
-    event.event.data = 0;
-    event.filter.pollFunc = PollKqueue;
-    event.filter.watched = watched;
-    if ((flags & EV_CLEAR) != 0) {
-        auto note = std::make_shared<ClearedKqueueNote>();
-        const auto snapshot = watched->SnapshotTriggered();
-        note->seen = snapshot.activations;
-        note->active = snapshot.count != 0;
-        event.event.data = static_cast<std::intptr_t>(snapshot.count);
-        event.filter.data = note.get();
-        event.filter.owner = std::move(note);
-        event.filter.pollFunc = PollClearedKqueue;
-        event.filter.resetFunc = ResetClearedKqueue;
-    }
     change.fflags = 0;
     change.data = 0;
-    return GuestErrno(queue->AddEvent(event));
+    return GuestErrno(AddKqueueReadEvent(queue, watched, change.ident, flags, change.udata));
 }
 
 int AddDescriptorKnote(const KernelEqueueRef& queue, KernelEvent& change, std::uint16_t flags) {
@@ -634,6 +606,42 @@ std::optional<std::uint64_t> ScanDeadline(const KernelTimespec& timeout) {
     return TimedWait::NowNanos() + span;
 }
 
+}
+
+int AddKqueueReadEvent(const KernelEqueueRef& queue, const KernelEqueueRef& watched, std::uintptr_t ident, std::uint16_t flags, void* udata) {
+    std::lock_guard lock(g_kqueueWatchMutex);
+    std::vector<const KernelEqueuePrivate*> visited;
+    if (KqueueReaches(watched, queue.get(), visited)) {
+        NotImplemented_nid_no_patch("EVFILT_READ on a kqueue that watches the kqueue being registered on");
+    }
+    KernelEqueueEvent event{};
+    event.event.ident = ident;
+    event.event.filter = EVFILT_READ;
+    event.event.flags = flags;
+    event.event.udata = udata;
+    event.filter.pollFunc = PollKqueue;
+    event.filter.watched = watched;
+    if ((flags & EV_CLEAR) != 0) {
+        auto note = std::make_shared<ClearedKqueueNote>();
+        const auto snapshot = watched->SnapshotTriggered();
+        note->seen = snapshot.activations;
+        note->active = snapshot.count != 0;
+        event.event.data = static_cast<std::intptr_t>(snapshot.count);
+        event.filter.data = note.get();
+        event.filter.owner = std::move(note);
+        event.filter.pollFunc = PollClearedKqueue;
+        event.filter.resetFunc = ResetClearedKqueue;
+    }
+    return queue->AddEvent(event);
+}
+
+int AddStandardInputReadEvent(const KernelEqueueRef& queue, std::uint16_t flags, void* udata) {
+    KernelEqueueEvent event{};
+    event.event.ident = 0;
+    event.event.filter = EVFILT_READ;
+    event.event.flags = flags;
+    event.event.udata = udata;
+    return queue->AddEvent(event);
 }
 
 bool IsKqueueDescriptor_nid_no_patch(int descriptor) {

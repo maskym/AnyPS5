@@ -89,6 +89,7 @@ static constexpr int SceOk = 0;
 static constexpr int SceEnoent = static_cast<int>(0x80020002);
 static constexpr int SceEbadf = static_cast<int>(0x80020009);
 static constexpr int SceEinval = static_cast<int>(0x80020016);
+static constexpr int SceEtimedout = static_cast<int>(0x8002003c);
 
 static void Require(bool value, std::source_location location = std::source_location::current()) {
     if (!value) {
@@ -416,6 +417,31 @@ static void EqueueIsKqueueDescriptor() {
     Require(close_nid_postfix(static_cast<int>(static_cast<std::uint32_t>(eq))) == 0);
     Require(sceKernelWaitEqueue(eq, events, 2, &out, &none) == SceEbadf);
     Require(sceKernelDeleteEqueue(eq) == SceEbadf);
+}
+
+static void EqueueReadEventOnKqueue() {
+    KernelEqueue a = 0;
+    KernelEqueue b = 0;
+    Require(sceKernelCreateEqueue(&a, "watching") == SceOk);
+    Require(sceKernelCreateEqueue(&b, "watched") == SceOk);
+    const int ka = static_cast<int>(static_cast<std::uint32_t>(a));
+    const int kb = static_cast<int>(static_cast<std::uint32_t>(b));
+    int marker = 0;
+    KernelEvent events[2]{};
+    int out = 0;
+    const KernelUseconds none = 0;
+    Require(sceKernelAddReadEvent(a, kb, 64, &marker) == SceOk);
+    Require(sceKernelWaitEqueue(a, events, 2, &out, &none) == SceEtimedout && out == 0);
+    Require(Apply(kb, Change(9, EvfiltUser, EvAdd)) == 0);
+    Require(Apply(kb, Change(9, EvfiltUser, 0, NoteTrigger)) == 0);
+    Require(sceKernelWaitEqueue(a, events, 2, &out, &none) == SceOk && out == 1 && events[0].ident == static_cast<std::uintptr_t>(kb) && events[0].filter == EvfiltRead && events[0].data == 1 && events[0].udata == &marker);
+    Require(sceKernelAddWriteEvent(a, kb, 0, nullptr) == SceEinval);
+    Require(sceKernelAddReadEvent(a, ka, 0, nullptr) == SceEinval);
+    Require(ThrownMessage([b, ka] { sceKernelAddReadEvent(b, ka, 0, nullptr); }).find("watches the kqueue") != std::string::npos);
+    Require(sceKernelDeleteReadEvent(a, kb) == SceOk);
+    Require(sceKernelDeleteReadEvent(a, kb) == SceEnoent);
+    Require(sceKernelDeleteEqueue(b) == SceOk);
+    Require(sceKernelDeleteEqueue(a) == SceOk);
 }
 
 static void FilesystemEvents() {
@@ -1875,6 +1901,14 @@ static void StandardInput() {
     const int kq = kqueue_nid_postfix();
     int marker = 0;
     KernelEvent events[4]{};
+    KernelEqueue eq = 0;
+    Require(sceKernelCreateEqueue(&eq, "standard input") == SceOk);
+    Require(sceKernelAddReadEvent(eq, 0, 1, &marker) == SceOk);
+    int out = 0;
+    const KernelUseconds none = 0;
+    Require(sceKernelWaitEqueue(eq, events, 4, &out, &none) == SceEtimedout && out == 0);
+    Require(sceKernelDeleteReadEvent(eq, 0) == SceOk);
+    Require(sceKernelDeleteEqueue(eq) == SceOk);
     Require(Apply(kq, Change(0, EvfiltRead, EvAdd, 0, 0, &marker)) == 0);
     Require(Poll(kq, events, 4) == 0);
     const KernelTimespec brief{0, 20000000};
@@ -1916,6 +1950,7 @@ int main(int argc, char** argv) {
     StandardInput();
     CreateAndClose();
     EqueueIsKqueueDescriptor();
+    EqueueReadEventOnKqueue();
     SocketReplacesDescriptor();
     KqueueDescriptorOperations();
     KqueueDescriptorMetadata();

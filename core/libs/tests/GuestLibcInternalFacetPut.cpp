@@ -23,6 +23,8 @@ extern "C" {
 extern GuestLocale::Implementation* _ZSt21_sceLibcClassicLocale_nid_postfix;
 extern std::uint64_t _ZNSt5ctypeIcE2idE_nid_postfix;
 extern std::uint64_t _ZNSt5ctypeIwE2idE_nid_postfix;
+GuestLocale::OutputIterator APS5_VABI _ZNKSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE4_PutES3_PKwm_nid_postfix(const GuestLocale::Facet* self, GuestLocale::OutputIterator out, const std::uint16_t* first, std::size_t count);
+GuestLocale::OutputIterator APS5_VABI _ZNKSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE4_RepES3_wm_nid_postfix(const GuestLocale::Facet* self, GuestLocale::OutputIterator out, std::uint16_t element, std::size_t count);
 }
 
 namespace {
@@ -635,6 +637,93 @@ void CheckWideTimePutGetcat() {
     Require(false, "_Getcat with a null locale must throw");
 }
 
+using NarrowPutExport = GuestLocale::OutputIterator (APS5_VABI*)(const GuestLocale::Facet*, GuestLocale::OutputIterator, const char*, std::size_t);
+using NarrowRepExport = GuestLocale::OutputIterator (APS5_VABI*)(const GuestLocale::Facet*, GuestLocale::OutputIterator, char, std::size_t);
+using NarrowMoneyRepExport = GuestLocale::OutputIterator (APS5_VABI*)(GuestLocale::OutputIterator, char, std::size_t);
+using WideMoneyRepExport = GuestLocale::OutputIterator (APS5_VABI*)(GuestLocale::OutputIterator, std::uint16_t, std::size_t);
+
+template<typename TWrite>
+void CheckNarrowWriter(TWrite write, std::size_t count, const std::string& expected, const char* name) {
+    auto stream = MakeStream(64);
+    GuestLocale::OutputIterator out = write(GuestLocale::OutputIterator{false, &stream.buffer}, count);
+    Require(stream.accepted == expected && !out.failed && out.buffer == &stream.buffer && stream.offered == static_cast<int>(expected.size()), name);
+    auto shortStream = MakeStream(2);
+    out = write(GuestLocale::OutputIterator{false, &shortStream.buffer}, count);
+    Require(shortStream.accepted == expected.substr(0, 2) && out.failed && shortStream.offered == static_cast<int>(count), "a refused overflow marks the iterator failed and later elements are still offered");
+    auto emptyStream = MakeStream(0);
+    out = write(GuestLocale::OutputIterator{true, &emptyStream.buffer}, 0);
+    Require(emptyStream.offered == 0 && out.failed && out.buffer == &emptyStream.buffer, "a zero count offers nothing and returns the iterator unchanged");
+    out = write(GuestLocale::OutputIterator{false, &emptyStream.buffer}, 0);
+    Require(emptyStream.offered == 0 && !out.failed && out.buffer == &emptyStream.buffer, "a zero count keeps a good iterator");
+    out = write(GuestLocale::OutputIterator{false, nullptr}, count);
+    Require(out.failed && out.buffer == nullptr, "a null stream buffer marks the iterator failed");
+    std::array<char, 8> area{};
+    area.fill('.');
+    char* next = area.data();
+    char* end = area.data() + 2;
+    auto areaStream = MakeStream(64);
+    areaStream.buffer.putNext = &next;
+    areaStream.buffer.putEnd = &end;
+    out = write(GuestLocale::OutputIterator{false, &areaStream.buffer}, count);
+    Require(!out.failed && std::string(area.data(), 2) == expected.substr(0, 2) && area[2] == '.' && next == end, "elements fill the stream's put area while it has room");
+    Require(areaStream.accepted == expected.substr(2) && areaStream.offered == static_cast<int>(count) - 2, "elements past the put area go to overflow");
+    next = area.data();
+    end = area.data() + area.size();
+    auto roomyStream = MakeStream(0);
+    roomyStream.buffer.putNext = &next;
+    roomyStream.buffer.putEnd = &end;
+    out = write(GuestLocale::OutputIterator{false, &roomyStream.buffer}, count);
+    Require(!out.failed && std::string(area.data(), count) == expected && next == area.data() + count && roomyStream.offered == 0, "a put area with room takes every element without overflow");
+}
+
+void CheckNarrowPutAndRep() {
+    GuestLocale::Facet facet{&g_testFacet, 1, 0};
+    const auto put = Export<NarrowPutExport>("k8zgjeBmpVY");
+    const char text[] = "abc";
+    CheckNarrowWriter([&](GuestLocale::OutputIterator out, std::size_t count) { return put(&facet, out, text, count); }, 3, "abc", "num_put<char>::_Put writes each character");
+    const auto rep = Export<NarrowRepExport>("tCihLs4UJxQ");
+    CheckNarrowWriter([&](GuestLocale::OutputIterator out, std::size_t count) { return rep(&facet, out, '*', count); }, 4, "****", "num_put<char>::_Rep repeats the character");
+    const auto moneyRep = Export<NarrowMoneyRepExport>("1dY2KJfkgMM");
+    CheckNarrowWriter([&](GuestLocale::OutputIterator out, std::size_t count) { return moneyRep(out, '\xa4', count); }, 3, "\xa4\xa4\xa4", "money_put<char>::_Rep repeats the character");
+}
+
+template<typename TWrite>
+void CheckWideWriter(TWrite write, std::size_t count, const std::u16string& expected, const char* name) {
+    auto stream = MakeWideStream(64);
+    GuestLocale::OutputIterator out = write(GuestLocale::OutputIterator{false, &stream.buffer}, count);
+    std::vector<int> offered;
+    for (const char16_t element : expected) offered.push_back(element);
+    Require(stream.accepted == expected && !out.failed && out.buffer == &stream.buffer && stream.offered == offered, name);
+    auto shortStream = MakeWideStream(2);
+    out = write(GuestLocale::OutputIterator{false, &shortStream.buffer}, count);
+    Require(shortStream.accepted == expected.substr(0, 2) && out.failed && shortStream.offered == offered, "a refused wide overflow marks the iterator failed and later elements are still offered");
+    auto emptyStream = MakeWideStream(0);
+    out = write(GuestLocale::OutputIterator{true, &emptyStream.buffer}, 0);
+    Require(emptyStream.offered.empty() && out.failed && out.buffer == &emptyStream.buffer, "a zero wide count offers nothing and returns the iterator unchanged");
+    out = write(GuestLocale::OutputIterator{false, nullptr}, count);
+    Require(out.failed && out.buffer == nullptr, "a null stream buffer marks the wide iterator failed");
+    std::array<std::uint16_t, 8> area{};
+    area.fill(0x5a5a);
+    char* next = reinterpret_cast<char*>(area.data());
+    char* end = reinterpret_cast<char*>(area.data() + area.size());
+    auto areaStream = MakeWideStream(0);
+    areaStream.buffer.putNext = &next;
+    areaStream.buffer.putEnd = &end;
+    out = write(GuestLocale::OutputIterator{false, &areaStream.buffer}, count);
+    Require(!out.failed && std::u16string(reinterpret_cast<const char16_t*>(area.data()), count) == expected && area[count] == 0x5a5a, "wide elements are stored as 16-bit values in the put area");
+    Require(next == reinterpret_cast<char*>(area.data()) + 2 * count && areaStream.offered.empty(), "the put pointer advances two bytes per wide element without overflow");
+}
+
+void CheckWidePutAndRep() {
+    GuestLocale::Facet facet{&g_testFacet, 1, 0};
+    const std::u16string text = u"a☺éＡ";
+    const auto* first = reinterpret_cast<const std::uint16_t*>(text.data());
+    CheckWideWriter([&](GuestLocale::OutputIterator out, std::size_t count) { return _ZNKSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE4_PutES3_PKwm_nid_postfix(&facet, out, first, count); }, text.size(), text, "num_put<wchar_t>::_Put writes each 16-bit element");
+    CheckWideWriter([&](GuestLocale::OutputIterator out, std::size_t count) { return _ZNKSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE4_RepES3_wm_nid_postfix(&facet, out, g_wideFill, count); }, 3, std::u16string(3, static_cast<char16_t>(g_wideFill)), "num_put<wchar_t>::_Rep repeats the 16-bit element");
+    const auto moneyRep = Export<WideMoneyRepExport>("6QU40olMkOM");
+    CheckWideWriter([&](GuestLocale::OutputIterator out, std::size_t count) { return moneyRep(out, 0x8000, count); }, 3, std::u16string(3, u'耀'), "money_put<wchar_t>::_Rep repeats the 16-bit element");
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -668,7 +757,9 @@ int main(int argc, char** argv) {
     CheckWideStreamWrite();
     CheckWideTimePutDoPut();
     CheckWideTimePutGetcat();
+    CheckNarrowPutAndRep();
+    CheckWidePutAndRep();
 
-    std::puts("libc internal num_put and time_put put checks passed");
+    std::puts("libc internal num_put, money_put and time_put put checks passed");
     return 0;
 }

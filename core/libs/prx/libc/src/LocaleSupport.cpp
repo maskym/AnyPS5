@@ -903,6 +903,26 @@ extern "C" GuestLocale::String* LibcCopyWideString_nid_no_patch(GuestLocale::Str
     return CopyStringUnits(result, source, GuestWideCharacterSize, GuestWideInlineCapacity, GuestWideStringMaxSize);
 }
 
+extern "C" GuestLocale::OutputIterator LibcPutCharacters_nid_no_patch(GuestLocale::OutputIterator out, const char* first, std::size_t count) {
+    for (; count > 0; --count, ++first) PutCharacter(out, *first);
+    return out;
+}
+
+extern "C" GuestLocale::OutputIterator LibcRepeatCharacter_nid_no_patch(GuestLocale::OutputIterator out, char character, std::size_t count) {
+    for (; count > 0; --count) PutCharacter(out, character);
+    return out;
+}
+
+extern "C" GuestLocale::OutputIterator LibcPutWideElements_nid_no_patch(GuestLocale::OutputIterator out, const std::uint16_t* first, std::size_t count) {
+    for (; count > 0; --count, ++first) PutWideElement(out, *first);
+    return out;
+}
+
+extern "C" GuestLocale::OutputIterator LibcRepeatWideElement_nid_no_patch(GuestLocale::OutputIterator out, std::uint16_t element, std::size_t count) {
+    for (; count > 0; --count) PutWideElement(out, element);
+    return out;
+}
+
 extern "C" GuestLocale::OutputIterator LibcWideTimePutPattern_nid_no_patch(const GuestLocale::Facet* self, GuestLocale::OutputIterator out, GuestLocale::IosBase* stream, std::uint16_t fill, const GuestTm* time, const std::uint16_t* first, const std::uint16_t* last) {
     const GuestLocale::Facet* ctype = FindFacet(stream, _ZNSt5ctypeIwE2idE_nid_postfix);
     const auto put = reinterpret_cast<const GuestLocale::WideTimePutVtable*>(self->vtable)->put;

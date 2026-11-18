@@ -84,4 +84,32 @@ std::size_t APS5_VABI sceLibcInternalWideTimePutGetcat_nid_no_patch(GuestLocale:
 }
 APS5_EXPORT("bF2uVCqVhBY", sceLibcInternalWideTimePutGetcat_nid_no_patch);
 
+GuestLocale::OutputIterator APS5_VABI sceLibcInternalNumPutPut_nid_no_patch(const GuestLocale::Facet*, GuestLocale::OutputIterator out, const char* first, std::size_t count) {
+    return LibcPutCharacters_nid_no_patch(out, first, count);
+}
+APS5_EXPORT("k8zgjeBmpVY", sceLibcInternalNumPutPut_nid_no_patch);
+
+GuestLocale::OutputIterator APS5_VABI sceLibcInternalNumPutRep_nid_no_patch(const GuestLocale::Facet*, GuestLocale::OutputIterator out, char character, std::size_t count) {
+    return LibcRepeatCharacter_nid_no_patch(out, character, count);
+}
+APS5_EXPORT("tCihLs4UJxQ", sceLibcInternalNumPutRep_nid_no_patch);
+
+GuestLocale::OutputIterator APS5_VABI _ZNKSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE4_PutES3_PKwm_nid_postfix(const GuestLocale::Facet*, GuestLocale::OutputIterator out, const std::uint16_t* first, std::size_t count) {
+    return LibcPutWideElements_nid_no_patch(out, first, count);
+}
+
+GuestLocale::OutputIterator APS5_VABI _ZNKSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE4_RepES3_wm_nid_postfix(const GuestLocale::Facet*, GuestLocale::OutputIterator out, std::uint16_t element, std::size_t count) {
+    return LibcRepeatWideElement_nid_no_patch(out, element, count);
+}
+
+GuestLocale::OutputIterator APS5_VABI sceLibcInternalMoneyPutRep_nid_no_patch(GuestLocale::OutputIterator out, char character, std::size_t count) {
+    return LibcRepeatCharacter_nid_no_patch(out, character, count);
+}
+APS5_EXPORT("1dY2KJfkgMM", sceLibcInternalMoneyPutRep_nid_no_patch);
+
+GuestLocale::OutputIterator APS5_VABI sceLibcInternalWideMoneyPutRep_nid_no_patch(GuestLocale::OutputIterator out, std::uint16_t element, std::size_t count) {
+    return LibcRepeatWideElement_nid_no_patch(out, element, count);
+}
+APS5_EXPORT("6QU40olMkOM", sceLibcInternalWideMoneyPutRep_nid_no_patch);
+
 }

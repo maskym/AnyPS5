@@ -523,11 +523,13 @@ class EnvReferenceTests(unittest.TestCase):
             def __init__(self):
                 self.encoding = "ascii"
                 self.errors = "strict"
+                self.newline = None
                 self.text = ""
 
-            def reconfigure(self, encoding=None, errors=None):
+            def reconfigure(self, encoding=None, errors=None, newline=None):
                 self.encoding = encoding
                 self.errors = errors
+                self.newline = newline
 
             def write(self, text):
                 text.encode(self.encoding, self.errors)
@@ -545,8 +547,8 @@ class EnvReferenceTests(unittest.TestCase):
         out, err = Stream(), Stream()
         with mock.patch.object(env_reference.sys, "stdout", out), mock.patch.object(env_reference.sys, "stderr", err):
             self.assertEqual(env_reference.main(["--root", str(core)]), 0)
-        self.assertEqual((out.encoding, out.errors), ("utf-8", "backslashreplace"))
-        self.assertEqual((err.encoding, err.errors), ("utf-8", "backslashreplace"))
+        self.assertEqual((out.encoding, out.errors, out.newline), ("utf-8", "backslashreplace", "\n"))
+        self.assertEqual((err.encoding, err.errors, err.newline), ("utf-8", "backslashreplace", "\n"))
         self.assertIn((core / "Sample.cpp").as_posix(), out.text)
 
     def test_main_reports_unicode_scan_root_with_non_utf8_stderr(self):
@@ -554,11 +556,13 @@ class EnvReferenceTests(unittest.TestCase):
             def __init__(self):
                 self.encoding = "ascii"
                 self.errors = "strict"
+                self.newline = None
                 self.text = ""
 
-            def reconfigure(self, encoding=None, errors=None):
+            def reconfigure(self, encoding=None, errors=None, newline=None):
                 self.encoding = encoding
                 self.errors = errors
+                self.newline = newline
 
             def write(self, text):
                 text.encode(self.encoding, self.errors)
@@ -572,8 +576,8 @@ class EnvReferenceTests(unittest.TestCase):
         out, err = Stream(), Stream()
         with mock.patch.object(env_reference.sys, "stdout", out), mock.patch.object(env_reference.sys, "stderr", err):
             self.assertEqual(env_reference.main(["--root", str(root)]), 1)
-        self.assertEqual((out.encoding, out.errors), ("utf-8", "backslashreplace"))
-        self.assertEqual((err.encoding, err.errors), ("utf-8", "backslashreplace"))
+        self.assertEqual((out.encoding, out.errors, out.newline), ("utf-8", "backslashreplace", "\n"))
+        self.assertEqual((err.encoding, err.errors, err.newline), ("utf-8", "backslashreplace", "\n"))
         self.assertIn(str(root), err.text)
 
     def test_main_rejects_a_scan_root_that_is_not_a_directory(self):
@@ -593,10 +597,12 @@ class EnvReferenceTests(unittest.TestCase):
             def __init__(self):
                 self.encoding = None
                 self.errors = None
+                self.newline = None
 
-            def reconfigure(self, encoding=None, errors=None):
+            def reconfigure(self, encoding=None, errors=None, newline=None):
                 self.encoding = encoding
                 self.errors = errors
+                self.newline = newline
 
             def write(self, text):
                 pass
@@ -614,6 +620,8 @@ class EnvReferenceTests(unittest.TestCase):
         self.assertEqual(out.errors, "backslashreplace")
         self.assertEqual(err.encoding, "utf-8")
         self.assertEqual(err.errors, "backslashreplace")
+        self.assertEqual(out.newline, "\n")
+        self.assertEqual(err.newline, "\n")
 
 
     def test_cpp_comments_raw_literals_and_characters_do_not_create_reads(self):

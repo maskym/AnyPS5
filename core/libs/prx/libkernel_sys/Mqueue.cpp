@@ -3,6 +3,7 @@
 #include "prx/libkernel/Equeue/Equeue.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libc/include/GuestErrno.hpp"
+#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
@@ -47,13 +48,18 @@ constexpr std::int64_t DefaultMessages = 10;
 constexpr std::int64_t DefaultMessageSize = 1024;
 constexpr unsigned PriorityMax = 64;
 constexpr std::size_t NameBytes = 256;
+constexpr std::int64_t MaxQueues = 100;
 
 struct Message {
     unsigned priority;
     std::vector<char> bytes;
 };
 
+std::atomic<std::int64_t> g_liveQueues{0};
+
 struct Queue {
+    Queue() { ++g_liveQueues; }
+    ~Queue() { --g_liveQueues; }
     std::mutex lock;
     std::condition_variable readable;
     std::condition_variable writable;
@@ -155,6 +161,7 @@ int APS5_VABI kmq_open_nid_postfix(const char* path, int flags, unsigned int mod
     const auto found = g_queues.find(name);
     if (found == g_queues.end()) {
         if (!create) return Fail(GuestEnoent);
+        if (g_liveQueues.load() >= MaxQueues) return Fail(GuestEnfile);
         queue = std::make_shared<Queue>();
         if (attr != nullptr) {
             queue->maxmsg = localAttr.maxmsg;

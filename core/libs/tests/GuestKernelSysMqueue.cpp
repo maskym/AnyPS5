@@ -13,6 +13,7 @@
 #include <source_location>
 #include <string>
 #include <thread>
+#include <vector>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -27,6 +28,7 @@ constexpr int Ebadf = 9;
 constexpr int Efault = 14;
 constexpr int Eexist = 17;
 constexpr int Einval = 22;
+constexpr int Enfile = 23;
 constexpr int Eagain = 35;
 constexpr int Emsgsize = 40;
 constexpr int Etimedout = 60;
@@ -237,6 +239,34 @@ void ConcurrentSetattr() {
     Require(close_nid_postfix(queue) == 0 && kmq_unlink_nid_postfix(name.c_str()) == 0);
 }
 
+void QueueLimit() {
+    const auto base = Name("limit");
+    std::vector<int> queues;
+    for (int i = 0; i < 100; ++i) {
+        const auto name = base + "-" + std::to_string(i);
+        queues.push_back(kmq_open_nid_postfix(name.c_str(), ORdwr | OCreat, 0600, nullptr));
+        Require(queues.back() >= 0);
+    }
+    const auto first = base + "-0";
+    const auto extra = base + "-x";
+    Require(kmq_open_nid_postfix(extra.c_str(), ORdwr | OCreat, 0600, nullptr) == -1 && Error() == Enfile);
+    Require(kmq_open_nid_postfix(extra.c_str(), ORdwr | OCreat | OExcl, 0600, nullptr) == -1 && Error() == Enfile);
+    const int again = kmq_open_nid_postfix(first.c_str(), ORdwr | OCreat, 0600, nullptr);
+    Require(again >= 0 && close_nid_postfix(again) == 0);
+    Require(kmq_unlink_nid_postfix(first.c_str()) == 0);
+    Require(kmq_open_nid_postfix(extra.c_str(), ORdwr | OCreat, 0600, nullptr) == -1 && Error() == Enfile);
+    Require(close_nid_postfix(queues[0]) == 0);
+    const int created = kmq_open_nid_postfix(extra.c_str(), ORdwr | OCreat, 0600, nullptr);
+    Require(created >= 0 && close_nid_postfix(created) == 0 && kmq_unlink_nid_postfix(extra.c_str()) == 0);
+    for (int i = 1; i < 100; ++i) {
+        const auto name = base + "-" + std::to_string(i);
+        Require(close_nid_postfix(queues[i]) == 0 && kmq_unlink_nid_postfix(name.c_str()) == 0);
+    }
+    const auto fresh = Name("limitfresh");
+    const int last = kmq_open_nid_postfix(fresh.c_str(), ORdwr | OCreat, 0600, nullptr);
+    Require(last >= 0 && close_nid_postfix(last) == 0 && kmq_unlink_nid_postfix(fresh.c_str()) == 0);
+}
+
 class UnreadablePage {
 public:
     UnreadablePage() {
@@ -320,6 +350,7 @@ int main() {
     NullBuffer();
     FarDeadline();
     ConcurrentSetattr();
+    QueueLimit();
     std::puts("message queues passed");
     return 0;
 }

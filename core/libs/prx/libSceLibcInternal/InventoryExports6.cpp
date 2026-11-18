@@ -467,6 +467,30 @@ void APS5_VABI _ZNSt9money_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEED0E
     _ZdlPv_nid_postfix(self);
 }
 
+void APS5_VABI _ZNSt7num_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix(void* self) {
+    _ZdlPv_nid_postfix(self);
+}
+
+void APS5_VABI _ZNSt7num_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEED0Ev_nid_postfix(void* self) {
+    _ZdlPv_nid_postfix(self);
+}
+
+void APS5_VABI _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix(void* self) {
+    _ZdlPv_nid_postfix(self);
+}
+
+void APS5_VABI _ZNSt7num_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEED0Ev_nid_postfix(void* self) {
+    _ZdlPv_nid_postfix(self);
+}
+
+void APS5_VABI _ZNSt9money_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix(void* self) {
+    _ZdlPv_nid_postfix(self);
+}
+
+void APS5_VABI _ZNSt9money_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEED0Ev_nid_postfix(void* self) {
+    _ZdlPv_nid_postfix(self);
+}
+
 int APS5_VABI _ZNSt8numpunctIcED0Ev_nid_postfix() {
     NotImplemented_nid_no_patch(__func__);
     return 0;

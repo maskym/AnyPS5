@@ -22,6 +22,11 @@ struct GuestOption {
 
 struct GuestDirectoryEntry;
 
+namespace LibcException {
+struct CategoryObject;
+struct ErrorCode;
+}
+
 struct LibcUtimbuf {
     std::int64_t actime;
     std::int64_t modtime;
@@ -236,6 +241,8 @@ void APS5_VABI sceLibcInternalPointerToMemberTypeInfoBaseDestructor_nid_no_patch
 void APS5_VABI sceLibcInternalPointerToMemberTypeInfoCompleteDestructor_nid_no_patch(void* self);
 void APS5_VABI sceLibcInternalPointerToMemberTypeInfoDeletingDestructor_nid_no_patch(void* self);
 const char* APS5_VABI sceLibcInternalSystemErrorCategoryName_nid_no_patch(const void* self) noexcept;
+GuestLocale::String* APS5_VABI sceLibcInternalSystemErrorCategoryMessage_nid_no_patch(GuestLocale::String* result, const LibcException::CategoryObject* self, int value);
+LibcException::ErrorCode APS5_VABI sceLibcInternalSystemErrorCategoryCondition_nid_no_patch(const LibcException::CategoryObject* self, int value);
 const char* APS5_VABI sceLibcInternalGenericErrorCategoryName_nid_no_patch(const void* self) noexcept;
 const char* APS5_VABI sceLibcInternalIostreamErrorCategoryName_nid_no_patch(const void* self) noexcept;
 const char* APS5_VABI sceLibcInternalFutureErrorCategoryName_nid_no_patch(const void* self) noexcept;

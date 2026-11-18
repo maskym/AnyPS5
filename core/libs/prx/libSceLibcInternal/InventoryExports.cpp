@@ -34,16 +34,6 @@ void ReleaseStandardStreamInit(int& count) {
 
 extern "C" {
 
-int APS5_VABI libSceLibcInternalInventory_000_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
-}
-APS5_EXPORT("ww3UUl317Ng", libSceLibcInternalInventory_000_nid_no_patch);
-
-int APS5_VABI libSceLibcInternalInventory_002_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
-}
-APS5_EXPORT("HpAlvhNKb2Y", libSceLibcInternalInventory_002_nid_no_patch);
-
 int APS5_VABI libSceLibcInternalInventory_003_nid_no_patch() {
     NotImplemented_nid_no_patch(__func__);
 }

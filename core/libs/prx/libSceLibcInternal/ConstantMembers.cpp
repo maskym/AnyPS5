@@ -1,4 +1,5 @@
 #include "prx/libSceLibcInternal/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/General.hpp"
 #include "SceTypes.hpp"
 
@@ -8,6 +9,18 @@ const char* APS5_VABI sceLibcInternalSystemErrorCategoryName_nid_no_patch(const 
     return "system";
 }
 APS5_EXPORT("dXy+lFOiaQA", sceLibcInternalSystemErrorCategoryName_nid_no_patch);
+
+GuestLocale::String* APS5_VABI sceLibcInternalSystemErrorCategoryMessage_nid_no_patch(GuestLocale::String* result, const LibcException::CategoryObject* self, int value) {
+    using Message = GuestLocale::String* (APS5_VABI*)(GuestLocale::String*, const LibcException::CategoryObject*, int);
+    return reinterpret_cast<Message>(const_cast<void*>(static_cast<const void* const*>(_ZSt15system_categoryv_nid_postfix()->vtable)[3]))(result, self, value);
+}
+APS5_EXPORT("HpAlvhNKb2Y", sceLibcInternalSystemErrorCategoryMessage_nid_no_patch);
+
+LibcException::ErrorCode APS5_VABI sceLibcInternalSystemErrorCategoryCondition_nid_no_patch(const LibcException::CategoryObject* self, int value) {
+    using Condition = LibcException::ErrorCode (APS5_VABI*)(const LibcException::CategoryObject*, int);
+    return reinterpret_cast<Condition>(const_cast<void*>(static_cast<const void* const*>(_ZSt15system_categoryv_nid_postfix()->vtable)[4]))(self, value);
+}
+APS5_EXPORT("ww3UUl317Ng", sceLibcInternalSystemErrorCategoryCondition_nid_no_patch);
 
 const char* APS5_VABI sceLibcInternalGenericErrorCategoryName_nid_no_patch(const void*) noexcept {
     return "generic";

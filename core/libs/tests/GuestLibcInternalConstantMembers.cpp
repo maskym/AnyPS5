@@ -13,6 +13,7 @@ namespace {
 using CategoryName = const char* (APS5_VABI*)(const void*) noexcept;
 using VtableName = const char* (APS5_VABI*)(const LibcException::CategoryObject*);
 using VtableMessage = GuestLocale::String* (APS5_VABI*)(GuestLocale::String*, const LibcException::CategoryObject*, int);
+using VtableCondition = LibcException::ErrorCode (APS5_VABI*)(const LibcException::CategoryObject*, int);
 
 void Require(bool condition, const char* message) {
     if (condition) return;
@@ -78,6 +79,45 @@ void CheckFutureErrorWhat() {
     }
 }
 
+struct MessageText {
+    GuestLocale::String text{};
+    const char* Data() const { return text.capacity > GuestLocale::StringInlineCapacity ? text.pointer : text.buffer; }
+    ~MessageText() {
+        if (text.capacity > GuestLocale::StringInlineCapacity) _ZdlPv_nid_postfix(text.pointer);
+    }
+};
+
+void CheckSystemCategoryMembers() {
+    const auto* sys = _ZSt15system_categoryv_nid_postfix();
+    const auto* gen = _ZSt16generic_categoryv_nid_postfix();
+    const auto message = std::bit_cast<VtableMessage>(static_cast<const void* const*>(sys->vtable)[3]);
+    const auto condition = std::bit_cast<VtableCondition>(static_cast<const void* const*>(sys->vtable)[4]);
+    bool sawHeap = false;
+    for (int value : {22, 2, 1, 0, -1, 9999, INT_MIN, INT_MAX}) {
+        MessageText exported;
+        MessageText expected;
+        Require(sceLibcInternalSystemErrorCategoryMessage_nid_no_patch(&exported.text, sys, value) == &exported.text, "_System_error_category::message returns its result");
+        message(&expected.text, sys, value);
+        const char* mapped = _ZSt13_Syserror_mapi_nid_postfix(value);
+        const char* text = mapped ? mapped : "unknown error";
+        sawHeap = sawHeap || exported.text.capacity > GuestLocale::StringInlineCapacity;
+        Require(exported.text.size == expected.text.size && std::memcmp(exported.Data(), expected.Data(), exported.text.size) == 0, "_System_error_category::message matches the libc system category message");
+        Require(exported.text.size == std::strlen(text) && std::memcmp(exported.Data(), text, exported.text.size) == 0, "_System_error_category::message is the _Syserror_map text or unknown error");
+        const auto code = sceLibcInternalSystemErrorCategoryCondition_nid_no_patch(sys, value);
+        const auto libc = condition(sys, value);
+        Require(code.reserved == libc.reserved && code.value == libc.value && code.category == libc.category, "_System_error_category::default_error_condition matches the libc system category");
+        Require(code.reserved == 0 && code.value == value && code.category == (mapped ? gen : sys), "_System_error_category::default_error_condition keeps the value and picks the category");
+    }
+    Require(sawHeap, "a system category message is long enough to use the heap");
+    Require(std::strcmp(_ZSt13_Syserror_mapi_nid_postfix(22), "invalid argument") == 0, "_Syserror_map names 22 invalid argument");
+    Require(std::strcmp(_ZSt13_Syserror_mapi_nid_postfix(2), "no such file or directory") == 0, "_Syserror_map names 2 no such file or directory");
+    Require(std::strcmp(_ZSt13_Syserror_mapi_nid_postfix(1), "operation not permitted") == 0, "_Syserror_map names 1 operation not permitted");
+    const auto invalid = sceLibcInternalSystemErrorCategoryCondition_nid_no_patch(sys, 22);
+    Require(invalid.category == gen && invalid.value == 22 && invalid.reserved == 0, "_System_error_category::default_error_condition 22 is generic");
+    const auto unknown = sceLibcInternalSystemErrorCategoryCondition_nid_no_patch(sys, 9999);
+    Require(unknown.category == sys && unknown.value == 9999 && unknown.reserved == 0, "_System_error_category::default_error_condition 9999 is system");
+}
+
 void CheckCodecvtBase() {
     const int other = 0;
     alignas(8) unsigned char unaligned[16]{};
@@ -105,6 +145,7 @@ int main() {
     CheckCodecvtBase();
     RegisterHeap();
     CheckFutureErrorWhat();
+    CheckSystemCategoryMembers();
     std::puts("libc internal constant members passed");
     return 0;
 }

@@ -256,7 +256,7 @@ static std::filesystem::path OwnExecutablePath() {
 }
 
 static std::int32_t SpawnChildExplicit(const char* role, std::int32_t* processId, bool usePath = false,
-    PosixSpawnFileActions** actions = nullptr, int expectedResult = 0) {
+    PosixSpawnFileActions** actions = nullptr, int expectedResult = 0, const char* descriptor = nullptr) {
     const auto own = OwnExecutablePath();
     const auto target = own.parent_path() / std::filesystem::path(reinterpret_cast<const char8_t*>(("child.bin" + own.extension().string()).c_str()));
     std::error_code error;
@@ -286,6 +286,7 @@ static std::int32_t SpawnChildExplicit(const char* role, std::int32_t* processId
         entries.push_back(*entry);
 #endif
     entries.push_back(std::string("ANYPS5_POSIX_SPAWN_ROLE=") + role);
+    if (descriptor != nullptr) entries.push_back(std::string("ANYPS5_POSIX_SPAWN_DESCRIPTOR=") + descriptor);
     std::vector<char*> environment;
     for (auto& entry : entries)
         environment.push_back(entry.data());
@@ -364,6 +365,102 @@ static void CheckOrderedFileActions(const std::string& order) {
         Check((originalOutput.find("spawn-stdout") != std::string::npos) == (chain || untouched));
         Check((originalOutput.find("spawn-stderr") != std::string::npos) == (reverse || chain || untouched));
     }
+    CleanupChild();
+}
+
+static int SpawnDescriptorWriter(PosixSpawnFileActions** actions, int descriptor) {
+    std::int32_t processId = 0;
+    const std::string number = std::to_string(descriptor);
+    SpawnChildExplicit("child-descriptor", &processId, false, actions, 0, number.c_str());
+    Check(processId > 0);
+    int status = -1;
+    Check(waitpid_nid_postfix(processId, &status, 0) == processId);
+    Check((status & 0x7f) == 0);
+    return (status >> 8) & 0xff;
+}
+
+static std::string ApplicationFileText(const char* name) {
+    std::ifstream file(std::filesystem::current_path() / "app0" / name, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
+
+static void WriteApplicationFile(const char* name, const char* text) {
+    const auto app0 = std::filesystem::current_path() / "app0";
+    Check(std::filesystem::create_directories(app0) || std::filesystem::exists(app0));
+    std::ofstream file(app0 / name, std::ios::binary);
+    file << text;
+    Check(static_cast<bool>(file));
+}
+
+static void CheckChildDescriptors() {
+    PosixSpawnFileActions* actions = nullptr;
+    Check(posix_spawn_file_actions_init_nid_postfix(&actions) == 0);
+    Check(posix_spawn_file_actions_addopen_nid_postfix(&actions, 5, "/app0/spawn-fd5.txt", 0x601, 0600) == 0);
+    Check(SpawnDescriptorWriter(&actions, 5) == 0);
+    Check(posix_spawn_file_actions_destroy_nid_postfix(&actions) == 0);
+    Check(ApplicationFileText("spawn-fd5.txt") == "spawn-fd5");
+    CleanupChild();
+
+    WriteApplicationFile("spawn-append.txt", "head");
+    Check(posix_spawn_file_actions_init_nid_postfix(&actions) == 0);
+    Check(posix_spawn_file_actions_addopen_nid_postfix(&actions, 5, "/app0/spawn-append.txt", 0x9, 0) == 0);
+    Check(SpawnDescriptorWriter(&actions, 5) == 0);
+    Check(posix_spawn_file_actions_destroy_nid_postfix(&actions) == 0);
+    Check(ApplicationFileText("spawn-append.txt") == "headspawn-fd5");
+    CleanupChild();
+
+    WriteApplicationFile("spawn-dup.txt", "");
+    const int parent = open_nid_postfix("/app0/spawn-dup.txt", 0x601, 0600);
+    Check(parent >= 0);
+    Check(posix_spawn_file_actions_init_nid_postfix(&actions) == 0);
+    Check(posix_spawn_file_actions_adddup2_nid_postfix(&actions, parent, 6) == 0);
+    Check(SpawnDescriptorWriter(&actions, 6) == 0);
+    Check(posix_spawn_file_actions_destroy_nid_postfix(&actions) == 0);
+    Check(close_nid_postfix(parent) == 0);
+    Check(ApplicationFileText("spawn-dup.txt") == "spawn-fd6");
+    CleanupChild();
+
+    WriteApplicationFile("spawn-dup-append.txt", "head");
+    const int appending = open_nid_postfix("/app0/spawn-dup-append.txt", 0x9, 0);
+    Check(appending >= 0);
+    Check(posix_spawn_file_actions_init_nid_postfix(&actions) == 0);
+    Check(posix_spawn_file_actions_adddup2_nid_postfix(&actions, appending, 6) == 0);
+    Check(SpawnDescriptorWriter(&actions, 6) == 0);
+    Check(posix_spawn_file_actions_destroy_nid_postfix(&actions) == 0);
+    Check(close_nid_postfix(appending) == 0);
+    Check(ApplicationFileText("spawn-dup-append.txt") == "headspawn-fd6");
+    CleanupChild();
+
+    WriteApplicationFile("spawn-closed.txt", "");
+    Check(posix_spawn_file_actions_init_nid_postfix(&actions) == 0);
+    Check(posix_spawn_file_actions_addopen_nid_postfix(&actions, 40, "/app0/spawn-closed.txt", 0x601, 0600) == 0);
+    Check(posix_spawn_file_actions_addclose_nid_postfix(&actions, 40) == 0);
+    Check(SpawnDescriptorWriter(&actions, 40) == BadDescriptor);
+    Check(posix_spawn_file_actions_destroy_nid_postfix(&actions) == 0);
+    Check(ApplicationFileText("spawn-closed.txt").empty());
+    CleanupChild();
+
+    Check(posix_spawn_file_actions_init_nid_postfix(&actions) == 0);
+    Check(posix_spawn_file_actions_addopen_nid_postfix(&actions, 4, "/app0/spawn-chain.txt", 0x601, 0600) == 0);
+    Check(posix_spawn_file_actions_adddup2_nid_postfix(&actions, 4, 7) == 0);
+    Check(posix_spawn_file_actions_addclose_nid_postfix(&actions, 4) == 0);
+    Check(SpawnDescriptorWriter(&actions, 7) == 0);
+    Check(posix_spawn_file_actions_destroy_nid_postfix(&actions) == 0);
+    Check(ApplicationFileText("spawn-chain.txt") == "spawn-fd7");
+    CleanupChild();
+
+    WriteApplicationFile("spawn-closed-parent.txt", "");
+    const int closing = open_nid_postfix("/app0/spawn-closed-parent.txt", 0x601, 0600);
+    Check(closing >= 0);
+    Check(posix_spawn_file_actions_init_nid_postfix(&actions) == 0);
+    Check(posix_spawn_file_actions_addclose_nid_postfix(&actions, closing) == 0);
+    Check(posix_spawn_file_actions_adddup2_nid_postfix(&actions, closing, 6) == 0);
+    std::int32_t closedProcessId = 0;
+    Check(SpawnChildExplicit("child-descriptor", &closedProcessId, false, &actions, BadDescriptor, "6") == 0);
+    Check(closedProcessId == 0);
+    Check(posix_spawn_file_actions_destroy_nid_postfix(&actions) == 0);
+    Check(close_nid_postfix(closing) == 0);
+    Check(ApplicationFileText("spawn-closed-parent.txt").empty());
     CleanupChild();
 }
 
@@ -461,6 +558,16 @@ int main() {
             Check(write_nid_postfix(2, error, sizeof(error) - 1) == sizeof(error) - 1);
             std::_Exit(0);
         }
+        if (std::strcmp(role, "child-descriptor") == 0) {
+            const char* number = std::getenv("ANYPS5_POSIX_SPAWN_DESCRIPTOR");
+            Check(number != nullptr);
+            const int descriptor = std::atoi(number);
+            const std::string text = "spawn-fd" + std::to_string(descriptor);
+            const auto written = write_nid_postfix(descriptor, text.data(), text.size());
+            if (written == static_cast<decltype(written)>(text.size())) std::_Exit(0);
+            if (written == -1 && *__error_nid_postfix() == BadDescriptor) std::_Exit(9);
+            std::_Exit(1);
+        }
         if (std::strcmp(role, "child-exit-42") == 0) std::_Exit(42);
         if (std::strcmp(role, "child-exit-neg") == 0) std::exit(-1);
 #ifndef _WIN32
@@ -488,6 +595,7 @@ int main() {
     CheckSpawn();
     for (const char* order : {"open-dup", "close-dup", "dup-open", "open-self-dup", "close-self-dup", "dup-replace-dup", "untouched-self-dup"})
         CheckOrderedFileActions(order);
+    CheckChildDescriptors();
     CheckSpawnNullProcessId(false);
     CheckSpawnNullProcessId(true);
     CheckSpawnedChild("child-exit-42", 42);

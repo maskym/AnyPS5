@@ -1,3 +1,4 @@
+#include "prx/libkernel/include/Api.hpp"
 #include "prx/libc/include/Api.hpp"
 #include "prx/libSceLibcInternal/include/Api.hpp"
 #include "prx/libSceLibcInternal/include/Spawn.hpp"
@@ -12,8 +13,11 @@
 #include "prx/libkernel/File/include/FileFlags.hpp"
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <fcntl.h>
 #include <filesystem>
+#include <map>
+#include <memory>
 #include <new>
 #include <stdexcept>
 #include <string>
@@ -169,16 +173,33 @@ std::uint32_t SpawnAttributeFlags(PosixSpawnAttributes* const* attributes) {
 }
 
 #ifdef _WIN32
-struct ChildStreams {
-    HANDLE handles[3] = {INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE};
-    bool modified[3] = {};
+constexpr int GetStatusFlags = 3;
+constexpr unsigned char InheritedOpen = 0x01;
+constexpr unsigned char InheritedPipe = 0x08;
+constexpr unsigned char InheritedAppend = 0x20;
+constexpr unsigned char InheritedDevice = 0x40;
+constexpr std::size_t InheritanceBlockLimit = 0xFFFF;
 
-    ChildStreams() = default;
-    ChildStreams(const ChildStreams&) = delete;
-    ChildStreams& operator=(const ChildStreams&) = delete;
-    ~ChildStreams() {
-        for (HANDLE handle : handles)
-            if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
+struct ChildDescriptor {
+    HANDLE handle = INVALID_HANDLE_VALUE;
+    bool append = false;
+    bool named = false;
+};
+
+struct ChildDescriptors {
+    std::map<int, ChildDescriptor> entries;
+
+    ChildDescriptors() = default;
+    ChildDescriptors(const ChildDescriptors&) = delete;
+    ChildDescriptors& operator=(const ChildDescriptors&) = delete;
+    ~ChildDescriptors() {
+        for (const auto& [descriptor, entry] : entries)
+            if (entry.handle != INVALID_HANDLE_VALUE) CloseHandle(entry.handle);
+    }
+
+    HANDLE Handle(int descriptor) const {
+        const auto found = entries.find(descriptor);
+        return found == entries.end() ? INVALID_HANDLE_VALUE : found->second.handle;
     }
 };
 
@@ -189,33 +210,42 @@ HANDLE DuplicateInheritable(HANDLE source) {
     return handle;
 }
 
-void ReplaceChildStream(ChildStreams& streams, int descriptor, HANDLE source) {
-    HANDLE previous = streams.handles[descriptor];
-    streams.handles[descriptor] = source == INVALID_HANDLE_VALUE ? INVALID_HANDLE_VALUE : DuplicateInheritable(source);
-    streams.modified[descriptor] = true;
+void ReplaceChildDescriptor(ChildDescriptors& descriptors, int descriptor, HANDLE source, bool append) {
+    auto& entry = descriptors.entries[descriptor];
+    const HANDLE previous = entry.handle;
+    entry.handle = source == INVALID_HANDLE_VALUE ? INVALID_HANDLE_VALUE : DuplicateInheritable(source);
+    entry.append = entry.handle != INVALID_HANDLE_VALUE && append;
+    entry.named = true;
     if (previous != INVALID_HANDLE_VALUE) CloseHandle(previous);
 }
 
-int ApplyChildRedirection(ChildStreams& streams, const PosixSpawnFileAction& action) {
+int ApplyChildRedirection(ChildDescriptors& descriptors, const PosixSpawnFileAction& action) {
     switch (action.kind) {
     case PosixSpawnFileActionKind::Close:
-        if (action.descriptor >= 0 && action.descriptor < 3) ReplaceChildStream(streams, action.descriptor, INVALID_HANDLE_VALUE);
+        if (action.descriptor >= 0)
+            ReplaceChildDescriptor(descriptors, action.descriptor, INVALID_HANDLE_VALUE, false);
         return 0;
-    case PosixSpawnFileActionKind::Duplicate:
+    case PosixSpawnFileActionKind::Duplicate: {
         if (action.descriptor < 0 || action.newDescriptor < 0) return BadDescriptor;
-        if (action.newDescriptor > 2)
-            NotImplemented_nid_no_patch(("posix_spawn: a child descriptor " + std::to_string(action.newDescriptor) + " beyond the standard streams").c_str());
-        {
-            const HANDLE source = action.descriptor < 3 && streams.modified[action.descriptor]
-                ? streams.handles[action.descriptor] : WindowsDescriptorHandle_nid_no_patch(action.descriptor);
-            if (source == INVALID_HANDLE_VALUE) return BadDescriptor;
-            ReplaceChildStream(streams, action.newDescriptor, source);
+        HANDLE source = INVALID_HANDLE_VALUE;
+        bool append = false;
+        if (const auto named = descriptors.entries.find(action.descriptor); named != descriptors.entries.end() && named->second.named) {
+            source = named->second.handle;
+            append = named->second.append;
+        } else {
+            source = WindowsDescriptorHandle_nid_no_patch(action.descriptor);
+            if (source != INVALID_HANDLE_VALUE && action.newDescriptor > 2) {
+                const int status = fcntl_nid_postfix(action.descriptor, GetStatusFlags, 0);
+                if (status == -1) return *__error_nid_postfix();
+                append = (status & SCE_KERNEL_O_APPEND) != 0;
+            }
         }
+        if (source == INVALID_HANDLE_VALUE) return BadDescriptor;
+        ReplaceChildDescriptor(descriptors, action.newDescriptor, source, append);
         return 0;
+    }
     case PosixSpawnFileActionKind::Open: {
         if (action.descriptor < 0) return BadDescriptor;
-        if (action.descriptor > 2)
-            NotImplemented_nid_no_patch(("posix_spawn: a child descriptor " + std::to_string(action.descriptor) + " beyond the standard streams").c_str());
         std::filesystem::path native;
         if (const int error = ResolvePathError_nid_no_patch(action.path.c_str(), native)) return error;
         try {
@@ -223,7 +253,7 @@ int ApplyChildRedirection(ChildStreams& streams, const PosixSpawnFileAction& act
             if (fd < 0) return errno;
             const HANDLE source = WindowsDescriptorHandle_nid_no_patch(fd);
             try {
-                ReplaceChildStream(streams, action.descriptor, source);
+                ReplaceChildDescriptor(descriptors, action.descriptor, source, (action.openFlags & SCE_KERNEL_O_APPEND) != 0);
             } catch (...) {
                 ::_close(fd);
                 throw;
@@ -236,6 +266,35 @@ int ApplyChildRedirection(ChildStreams& streams, const PosixSpawnFileAction& act
     }
     }
     return 0;
+}
+
+std::vector<unsigned char> InheritanceBlock(const ChildDescriptors& descriptors) {
+    int count = 0;
+    for (const auto& [descriptor, entry] : descriptors.entries)
+        if (descriptor > 2 && entry.handle != INVALID_HANDLE_VALUE) count = descriptor + 1;
+    if (count == 0) return {};
+    const std::size_t size = sizeof(int) + static_cast<std::size_t>(count) * (1 + sizeof(HANDLE));
+    if (size > InheritanceBlockLimit)
+        throw std::runtime_error("posix_spawn: child descriptor " + std::to_string(count - 1) + " does not fit the inherited descriptor block");
+    std::vector<unsigned char> block(size);
+    std::memcpy(block.data(), &count, sizeof(int));
+    unsigned char* const flags = block.data() + sizeof(int);
+    unsigned char* const handles = flags + count;
+    for (int descriptor = 0; descriptor < count; ++descriptor) {
+        HANDLE handle = INVALID_HANDLE_VALUE;
+        unsigned char flag = 0;
+        if (const auto found = descriptors.entries.find(descriptor); descriptor > 2 && found != descriptors.entries.end() && found->second.handle != INVALID_HANDLE_VALUE) {
+            handle = found->second.handle;
+            flag = InheritedOpen;
+            const DWORD type = GetFileType(handle);
+            if (type == FILE_TYPE_PIPE) flag |= InheritedPipe;
+            else if (type == FILE_TYPE_CHAR) flag |= InheritedDevice;
+            if (found->second.append) flag |= InheritedAppend;
+        }
+        flags[descriptor] = flag;
+        std::memcpy(handles + static_cast<std::size_t>(descriptor) * sizeof(HANDLE), &handle, sizeof(HANDLE));
+    }
+    return block;
 }
 
 std::vector<wchar_t> ChildEnvironment(char* const* environment) {
@@ -280,22 +339,24 @@ int SpawnChild(const char* function, const std::string& guest, PosixSpawnFileAct
     const auto target = ConvertedExecutableTarget(function, guest);
     if (const std::uint32_t attributes_flags = SpawnAttributeFlags(attributes); attributes_flags != 0)
         NotImplemented_nid_no_patch(("posix_spawn: the attribute flags " + HexFlag(attributes_flags) + " on this host").c_str());
-    ChildStreams streams;
+    ChildDescriptors descriptors;
     const DWORD identifiers[] = {STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE};
-    bool redirected = false;
-    for (std::size_t index = 0; index < 3; ++index) {
+    for (int index = 0; index < 3; ++index) {
         const HANDLE source = GetStdHandle(identifiers[index]);
         if (source == nullptr || source == INVALID_HANDLE_VALUE) continue;
-        streams.handles[index] = DuplicateInheritable(source);
-        redirected = true;
+        descriptors.entries[index].handle = DuplicateInheritable(source);
     }
     if (actions != nullptr) {
         for (const auto& action : (*actions)->actions) {
-            if (action.kind != PosixSpawnFileActionKind::Close || (action.descriptor >= 0 && action.descriptor < 3)) redirected = true;
-            const int error = ApplyChildRedirection(streams, action);
+            const int error = ApplyChildRedirection(descriptors, action);
             if (error != 0) return error;
         }
     }
+    std::vector<HANDLE> inherited;
+    for (const auto& [descriptor, entry] : descriptors.entries)
+        if (entry.handle != INVALID_HANDLE_VALUE && std::find(inherited.begin(), inherited.end(), entry.handle) == inherited.end())
+            inherited.push_back(entry.handle);
+    auto inheritanceBlock = InheritanceBlock(descriptors);
     std::wstring command = L"\"" + target.wstring() + L"\"";
     for (std::size_t index = 0; arguments[index] != nullptr; ++index)
         command += L" " + HostExecutable::QuotedArgument(HostExecutable::Wide(arguments[index], "posix_spawn"));
@@ -303,7 +364,7 @@ int SpawnChild(const char* function, const std::string& guest, PosixSpawnFileAct
     auto environmentBlock = ChildEnvironment(environment);
     PROCESS_INFORMATION process{};
     const BOOL created = [&] {
-        if (!redirected || (streams.handles[0] == INVALID_HANDLE_VALUE && streams.handles[1] == INVALID_HANDLE_VALUE && streams.handles[2] == INVALID_HANDLE_VALUE)) {
+        if (inherited.empty()) {
             STARTUPINFOW plain{};
             plain.cb = sizeof(plain);
             return CreateProcessW(const_cast<wchar_t*>(target.c_str()), command.data(), nullptr, nullptr, FALSE,
@@ -313,20 +374,21 @@ int SpawnChild(const char* function, const std::string& guest, PosixSpawnFileAct
         STARTUPINFOEXW startup{};
         startup.StartupInfo.cb = sizeof(startup);
         startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-        startup.StartupInfo.hStdInput = streams.handles[0];
-        startup.StartupInfo.hStdOutput = streams.handles[1];
-        startup.StartupInfo.hStdError = streams.handles[2];
-        std::vector<HANDLE> inherited;
-        for (HANDLE handle : streams.handles)
-            if (handle != INVALID_HANDLE_VALUE) inherited.push_back(handle);
+        startup.StartupInfo.hStdInput = descriptors.Handle(0);
+        startup.StartupInfo.hStdOutput = descriptors.Handle(1);
+        startup.StartupInfo.hStdError = descriptors.Handle(2);
+        startup.StartupInfo.cbReserved2 = static_cast<WORD>(inheritanceBlock.size());
+        startup.StartupInfo.lpReserved2 = inheritanceBlock.empty() ? nullptr : inheritanceBlock.data();
         SIZE_T bytes = 0;
         InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
         std::vector<std::max_align_t> storage((bytes + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t));
         auto* list = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(storage.data());
-        if (!InitializeProcThreadAttributeList(list, 1, 0, &bytes) ||
-            !UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherited.data(), inherited.size() * sizeof(HANDLE), nullptr, nullptr))
+        if (!InitializeProcThreadAttributeList(list, 1, 0, &bytes))
             throw std::system_error(GetLastError(), std::system_category(), "posix_spawn: selecting inherited handles");
         const std::unique_ptr<_PROC_THREAD_ATTRIBUTE_LIST, void (*)(_PROC_THREAD_ATTRIBUTE_LIST*)> cleanup(list, DeleteProcThreadAttributeList);
+        if (!UpdateProcThreadAttribute(list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherited.data(), inherited.size() * sizeof(HANDLE), nullptr, nullptr))
+            throw std::system_error(GetLastError(), std::system_category(), "posix_spawn: selecting inherited handles");
+        startup.lpAttributeList = list;
         return CreateProcessW(const_cast<wchar_t*>(target.c_str()), command.data(), nullptr, nullptr, TRUE,
             EXTENDED_STARTUPINFO_PRESENT | (environmentBlock.empty() ? 0u : CREATE_UNICODE_ENVIRONMENT),
             environmentBlock.empty() ? nullptr : environmentBlock.data(), nullptr, &startup.StartupInfo, &process);

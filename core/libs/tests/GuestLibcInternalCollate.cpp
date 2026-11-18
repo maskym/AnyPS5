@@ -1,4 +1,5 @@
 #include "prx/libSceLibcInternal/include/Api.hpp"
+#include "prx/libSceLibcInternal/include/WideCollate.hpp"
 #include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/GuestLocale.hpp"
@@ -270,6 +271,17 @@ void CheckConstructorsAndLifetime() {
     CheckConstructedOperations(FacetPtr(s4));
     CheckConstructedLayout(s4, 2);
 
+    FacetStorage s5 = FilledStorage();
+    _ZNSt7collateIcEC2Em_nid_postfix(FacetPtr(s5), 0);
+    CheckConstructedOperations(FacetPtr(s5));
+    CheckConstructedLayout(s5, 0);
+
+    FacetStorage s6 = FilledStorage();
+    _ZNSt7collateIcEC2ERKSt8_Locinfom_nid_postfix(FacetPtr(s6), &locinfo, wideRefs);
+    CheckConstructedOperations(FacetPtr(s6));
+    CheckConstructedLayout(s6, wideRefs);
+    Require(std::memcmp(&locinfo, &locinfoSnapshot, sizeof(locinfo)) == 0, "C2 _Locinfo constructor does not mutate borrowed _Locinfo");
+
     const long freesBeforeDestroy = totalFrees;
     FacetPtr(s3)->base.vtable->destroy(&FacetPtr(s3)->base);
     Require(totalFrees == freesBeforeDestroy && liveAllocations == beforeAll, "destroy on stack facet frees nothing");
@@ -293,6 +305,19 @@ void CheckConstructorsAndLifetime() {
     Require(liveAllocations == beforeAll, "owned heap facet freed cleanly");
     Require(std::memcmp(&locinfo, &locinfoSnapshot, sizeof(locinfo)) == 0, "borrowed _Locinfo survives facet destruction");
 
+    auto* heapDeleting = static_cast<GuestLocale::CollateFacet*>(_Znwm_nid_postfix(sizeof(GuestLocale::CollateFacet)));
+    _ZNSt7collateIcEC2Em_nid_postfix(heapDeleting, 0);
+    Require(liveAllocations == beforeAll + 1, "heap facet for D0 is allocated");
+    const long freesBeforeCharDelete = totalFrees;
+    _ZNSt7collateIcED0Ev_nid_postfix(&heapDeleting->base);
+    Require(totalFrees == freesBeforeCharDelete + 1 && lastFreed == heapDeleting && liveAllocations == beforeAll, "collate<char> D0 frees the facet once");
+
+    void* wideBlock = _Znwm_nid_postfix(sizeof(GuestLocale::CollateFacet));
+    Require(liveAllocations == beforeAll + 1, "heap block for wide D0 is allocated");
+    const long freesBeforeWideDelete = totalFrees;
+    _ZNSt7collateIwED0Ev_nid_postfix(static_cast<GuestLocale::Facet*>(wideBlock));
+    Require(totalFrees == freesBeforeWideDelete + 1 && lastFreed == wideBlock && liveAllocations == beforeAll, "collate<wchar_t> D0 frees the facet once");
+
     _ZNSt8_LocinfoD1Ev_nid_postfix(&locinfo);
 }
 
@@ -305,10 +330,19 @@ void CheckErrorBranches() {
     Reject([] { _ZNSt7collateIcEC1EPKcm_nid_postfix(nullptr, "C", 0); }, "C1(const char*, size_t) rejects null this");
     Reject([&] { _ZNSt7collateIcEC1ERKSt8_Locinfom_nid_postfix(nullptr, &locinfo, 0); }, "C1(const _Locinfo&, size_t) rejects null this");
     Reject([] { _ZNSt7collateIcEC2EPKcm_nid_postfix(nullptr, "C", 0); }, "C2(const char*, size_t) rejects null this");
+    Reject([] { _ZNSt7collateIcEC2Em_nid_postfix(nullptr, 0); }, "C2(size_t) rejects null this");
+    Reject([&] { _ZNSt7collateIcEC2ERKSt8_Locinfom_nid_postfix(nullptr, &locinfo, 0); }, "C2(const _Locinfo&, size_t) rejects null this");
+    const long freesBeforeNullDelete = totalFrees;
+    Reject([] { _ZNSt7collateIcED0Ev_nid_postfix(nullptr); }, "collate<char> D0 rejects null this");
+    Reject([] { _ZNSt7collateIwED0Ev_nid_postfix(nullptr); }, "collate<wchar_t> D0 rejects null this");
+    Require(totalFrees == freesBeforeNullDelete, "rejected D0 frees nothing");
 
     FacetStorage sentinel = FilledStorage();
     Reject([&] { _ZNSt7collateIcEC1ERKSt8_Locinfom_nid_postfix(FacetPtr(sentinel), nullptr, 1); }, "C1(const _Locinfo&, size_t) rejects null _Locinfo");
     Require(UntouchedStorage(sentinel), "null _Locinfo leaves facet storage untouched");
+    FacetStorage sentinel2 = FilledStorage();
+    Reject([&] { _ZNSt7collateIcEC2ERKSt8_Locinfom_nid_postfix(FacetPtr(sentinel2), nullptr, 1); }, "C2(const _Locinfo&, size_t) rejects null _Locinfo");
+    Require(UntouchedStorage(sentinel2), "C2 null _Locinfo leaves facet storage untouched");
 
     const char* const invalidNames[] = {nullptr, "", "fr_FR", "POSIX", "en_US.UTF-8"};
     for (const char* badName : invalidNames) {
@@ -380,17 +414,23 @@ void CheckLibraryDispatch(const char* libraryPath, bool patchedNids) {
     auto ctorName1 = reinterpret_cast<CtorName>(resolve("splBMMcF3yk", "_ZNSt7collateIcEC1EPKcm_nid_postfix"));
     auto ctorLocinfo = reinterpret_cast<CtorLocinfo>(resolve("raLgIUi3xmk", "_ZNSt7collateIcEC1ERKSt8_Locinfom_nid_postfix"));
     auto ctorName2 = reinterpret_cast<CtorName>(resolve("VClCrMDyydE", "_ZNSt7collateIcEC2EPKcm_nid_postfix"));
+    auto ctorSize2 = reinterpret_cast<CtorSize>(resolve("tkqNipin1EI", "_ZNSt7collateIcEC2Em_nid_postfix"));
+    auto ctorLocinfo2 = reinterpret_cast<CtorLocinfo>(resolve("L71JAnoQees", "_ZNSt7collateIcEC2ERKSt8_Locinfom_nid_postfix"));
+    auto deleting = reinterpret_cast<Destructor>(resolve("Lt4407UMs2o", "_ZNSt7collateIcED0Ev_nid_postfix"));
+    auto wideDeleting = reinterpret_cast<Destructor>(resolve("ig4VDIRc21Q", "_ZNSt7collateIwED0Ev_nid_postfix"));
     auto dtor1 = reinterpret_cast<Destructor>(resolveNidCut("8pXCeme0FC4"));
     auto dtor2 = reinterpret_cast<Destructor>(resolveNidCut("dP5zwQ2Yc8g"));
     auto compareFn = reinterpret_cast<CompareFn>(resolveNidCut("Q-8lQCGMj4g"));
     auto hashFn = reinterpret_cast<HashFn>(resolveNidCut("6vYXzFD-mrk"));
 
-    Require(ctorSize && ctorName1 && ctorLocinfo && ctorName2 && dtor1 && dtor2 && compareFn && hashFn, "all collate constructors, destructors and member NIDs resolve");
+    Require(ctorSize && ctorName1 && ctorLocinfo && ctorName2 && ctorSize2 && ctorLocinfo2 && deleting && wideDeleting && dtor1 && dtor2 && compareFn && hashFn, "all collate constructors, destructors and member NIDs resolve");
 
     GuestLocale::LocinfoStorage locinfo{};
     _ZNSt8_LocinfoC1EPKc_nid_postfix(&locinfo, "C");
 
-    const std::array<GuestLocale::CollateFacet*, 4> facets{
+    const std::array<GuestLocale::CollateFacet*, 6> facets{
+        static_cast<GuestLocale::CollateFacet*>(_Znwm_nid_postfix(sizeof(GuestLocale::CollateFacet))),
+        static_cast<GuestLocale::CollateFacet*>(_Znwm_nid_postfix(sizeof(GuestLocale::CollateFacet))),
         static_cast<GuestLocale::CollateFacet*>(_Znwm_nid_postfix(sizeof(GuestLocale::CollateFacet))),
         static_cast<GuestLocale::CollateFacet*>(_Znwm_nid_postfix(sizeof(GuestLocale::CollateFacet))),
         static_cast<GuestLocale::CollateFacet*>(_Znwm_nid_postfix(sizeof(GuestLocale::CollateFacet))),
@@ -400,6 +440,8 @@ void CheckLibraryDispatch(const char* libraryPath, bool patchedNids) {
     ctorName1(facets[1], "C", 1);
     ctorLocinfo(facets[2], &locinfo, 1);
     ctorName2(facets[3], "C", 1);
+    ctorSize2(facets[4], 1);
+    ctorLocinfo2(facets[5], &locinfo, 1);
 
     const char left[] = "alpha";
     const char right[] = "beta";
@@ -412,8 +454,15 @@ void CheckLibraryDispatch(const char* libraryPath, bool patchedNids) {
         dtor1(facet);
         dtor2(facet);
         Require(facet->base.vtable->release(&facet->base) == &facet->base, "release returns facet after destructors");
-        facet->base.vtable->deleteObject(&facet->base);
+        const long freesBeforeDelete = totalFrees;
+        deleting(facet);
+        Require(totalFrees == freesBeforeDelete + 1 && lastFreed == facet, "NID D0 frees the constructed facet");
     }
+
+    void* wideBlock = _Znwm_nid_postfix(sizeof(GuestLocale::CollateFacet));
+    const long freesBeforeWideDelete = totalFrees;
+    wideDeleting(wideBlock);
+    Require(totalFrees == freesBeforeWideDelete + 1 && lastFreed == wideBlock, "NID wide D0 frees the facet");
 
     _ZNSt8_LocinfoD1Ev_nid_postfix(&locinfo);
     Require(liveAllocations == before, "library dispatch frees all allocations");

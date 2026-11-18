@@ -21,6 +21,10 @@ const GuestLocale::CollateVtable& DynamicVtable(const GuestLocale::CollateFacet*
 
 extern "C" {
 
+void APS5_VABI _ZNSt7collateIwED0Ev_nid_postfix(GuestLocale::Facet* self) {
+    GuestWideCollateVtable_nid_no_patch()->facet.deleteObject(self);
+}
+
 int APS5_VABI sceLibcInternalWideCollateDoCompare_nid_no_patch(const GuestLocale::CollateFacet* self, const char16_t* first1, const char16_t* last1, const char16_t* first2, const char16_t* last2) {
     return GuestWideCollateVtable_nid_no_patch()->compare(self, Characters(first1), Characters(last1), Characters(first2), Characters(last2));
 }

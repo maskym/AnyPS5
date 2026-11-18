@@ -50,6 +50,12 @@ void ConstructNamedCollate(GuestLocale::CollateFacet* self, const char* localeNa
     InitCollateFacet(self, references);
 }
 
+void ConstructCollateFromLocinfo(GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references) {
+    if (self == nullptr) throw std::invalid_argument("collate<char>::collate: null object");
+    if (locinfo == nullptr) throw std::invalid_argument("collate<char>::collate: null _Locinfo");
+    InitCollateFacet(self, references);
+}
+
 }
 
 extern "C" {
@@ -63,13 +69,23 @@ void APS5_VABI _ZNSt7collateIcEC1EPKcm_nid_postfix(GuestLocale::CollateFacet* se
 }
 
 void APS5_VABI _ZNSt7collateIcEC1ERKSt8_Locinfom_nid_postfix(GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references) {
-    if (self == nullptr) throw std::invalid_argument("collate<char>::collate: null object");
-    if (locinfo == nullptr) throw std::invalid_argument("collate<char>::collate: null _Locinfo");
-    InitCollateFacet(self, references);
+    ConstructCollateFromLocinfo(self, locinfo, references);
 }
 
 void APS5_VABI _ZNSt7collateIcEC2EPKcm_nid_postfix(GuestLocale::CollateFacet* self, const char* localeName, std::size_t references) {
     ConstructNamedCollate(self, localeName, references);
+}
+
+void APS5_VABI _ZNSt7collateIcEC2Em_nid_postfix(GuestLocale::CollateFacet* self, std::size_t references) {
+    ConstructNamedCollate(self, "C", references);
+}
+
+void APS5_VABI _ZNSt7collateIcEC2ERKSt8_Locinfom_nid_postfix(GuestLocale::CollateFacet* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references) {
+    ConstructCollateFromLocinfo(self, locinfo, references);
+}
+
+void APS5_VABI _ZNSt7collateIcED0Ev_nid_postfix(GuestLocale::Facet* self) {
+    BaseCollate().facet.deleteObject(self);
 }
 
 int APS5_VABI sceLibcInternalCollateDoCompare_nid_no_patch(const GuestLocale::CollateFacet* self, const char* first1, const char* last1, const char* first2, const char* last2) {

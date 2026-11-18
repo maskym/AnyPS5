@@ -6,6 +6,7 @@
 
 extern "C" {
 
+void APS5_VABI _ZNSt7collateIwED0Ev_nid_postfix(GuestLocale::Facet* self);
 int APS5_VABI sceLibcInternalWideCollateDoCompare_nid_no_patch(const GuestLocale::CollateFacet* self, const char16_t* first1, const char16_t* last1, const char16_t* first2, const char16_t* last2);
 GuestLocale::String* APS5_VABI sceLibcInternalWideCollateDoTransform_nid_no_patch(GuestLocale::String* result, const GuestLocale::CollateFacet* self, const char16_t* first, const char16_t* last);
 std::int64_t APS5_VABI sceLibcInternalWideCollateDoHash_nid_no_patch(const GuestLocale::CollateFacet* self, const char16_t* first, const char16_t* last);

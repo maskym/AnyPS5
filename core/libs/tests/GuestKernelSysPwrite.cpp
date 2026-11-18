@@ -120,20 +120,16 @@ int main(int argc, char** argv) {
     Require(seek(descriptor, 0, SEEK_CUR) == 3);
     Require(truncate(descriptor, 8) == 0);
     Require(close(descriptor) == 0);
-#ifndef _WIN32
     const int append = open(path.c_str(), SCE_KERNEL_O_WRONLY | SCE_KERNEL_O_APPEND, 0);
     Require(append >= 0 && seek(append, 2, SEEK_SET) == 2);
     Require(writeAt(append, "!", 1, 0) == 1 && seek(append, 0, SEEK_CUR) == 2);
     Require(std::filesystem::file_size(path) == 9);
     Require(close(append) == 0);
-#endif
     const int readOnly = open(path.c_str(), SCE_KERNEL_O_RDONLY, 0);
     Require(readOnly >= 0);
     Require(writeAt(readOnly, "x", 1, 0) == -1 && *error() == 9);
     Require(writeAt(readOnly, nullptr, 1, -1) == -1 && *error() == 9);
-#ifndef _WIN32
     Require(readAt(readOnly, contents, 1, 8) == 1 && contents[0] == '!');
-#endif
     Require(close(readOnly) == 0);
     int descriptors[2]{};
     Require(pipe(descriptors) == 0);

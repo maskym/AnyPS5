@@ -122,6 +122,7 @@ int main(int argc, char** argv) {
             for (;;) pause();
         }).detach();
         while (!locked.load()) std::this_thread::yield();
+#endif
         if (std::strcmp(argv[1], "abort-race") == 0) {
             for (int call = 0; call < 100; ++call) Require(first(1, 2, 3, 4, 5, 6, 7, 8) == 204);
             static std::atomic<bool> go{false};
@@ -132,7 +133,6 @@ int main(int argc, char** argv) {
             }).detach();
             go.store(true);
         }
-#endif
         std::abort();
     }
     CallTraceEntry entries[16];

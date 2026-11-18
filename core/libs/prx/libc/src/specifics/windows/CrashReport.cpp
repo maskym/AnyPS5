@@ -669,9 +669,17 @@ void ReportBacktrace(const char* what, bool reportThreads) {
     std::fflush(stderr);
 }
 
+std::atomic<bool> g_abortReporting{false};
+
 void AbortSignalHandler(int) {
+    std::signal(SIGABRT, AbortSignalHandler);
+    if (g_abortReporting.exchange(true, std::memory_order_acq_rel)) {
+        for (int waited = 0; waited < 2000 && g_abortReporting.load(std::memory_order_acquire); ++waited) Sleep(1);
+        return;
+    }
     ReportBacktrace("abort() (SIGABRT)", true);
     LibcRunFailureReports_nid_no_patch();
+    g_abortReporting.store(false, std::memory_order_release);
 }
 
 void InvalidParameterHandler(const wchar_t*, const wchar_t*, const wchar_t*, unsigned, std::uintptr_t) {

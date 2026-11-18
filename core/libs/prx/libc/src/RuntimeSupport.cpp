@@ -268,7 +268,7 @@ void CopySlots(const std::uintptr_t* source, std::uintptr_t* destination, std::s
 
 }
 
-int APS5_VABI _new_setup_nid_postfix(const void* table) {
+int APS5_VABI NewSetup_nid_no_patch(const void* table) {
     constexpr std::uint64_t primaryTableBytes = 0x50;
     constexpr std::uint64_t extendedTableBytes = 0x70;
     constexpr std::uint64_t trailingTableBytes = 0xc0;
@@ -289,5 +289,7 @@ int APS5_VABI _new_setup_nid_postfix(const void* table) {
     if (setup->trailing[0] != 0) CopySlots(setup->trailing, g_crtTrailingSlots, 10);
     return 0;
 }
+
+int APS5_VABI _new_setup_nid_postfix(const void* table) { return NewSetup_nid_no_patch(table); }
 
 }

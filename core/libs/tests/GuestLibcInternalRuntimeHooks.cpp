@@ -1,6 +1,7 @@
 #include "prx/libSceLibcInternal/include/Api.hpp"
 #include "prx/libSceLibcInternal/include/InventoryExports.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -13,6 +14,27 @@ void Require(bool condition, const char* message) {
         std::fprintf(stderr, "LibcInternal runtime hooks: %s\n", message);
         std::abort();
     }
+}
+
+struct SetupTable {
+    std::uint64_t size;
+    std::uintptr_t unknown;
+    std::uintptr_t primary[8];
+    std::uintptr_t extended[4];
+    std::uintptr_t trailing[10];
+};
+
+void SetupChecks() {
+    Require(libSceLibcInternalInventory_275_nid_no_patch(nullptr) == 0, "_new_setup must accept a null table");
+    SetupTable table;
+    std::memset(&table, 0, sizeof(table));
+    table.size = 0x4f;
+    Require(libSceLibcInternalInventory_275_nid_no_patch(&table) == 1, "_new_setup must refuse a size below 0x50");
+    table.size = 0x50;
+    for (std::size_t index = 0; index < 8; ++index) table.primary[index] = 0x1000 + index * 8;
+    Require(libSceLibcInternalInventory_275_nid_no_patch(&table) == 0, "_new_setup must accept a full primary group");
+    table.primary[3] = 0;
+    Require(libSceLibcInternalInventory_275_nid_no_patch(&table) == 1, "_new_setup must refuse a partial primary group");
 }
 
 }
@@ -41,5 +63,6 @@ int main() {
 
     Require(std::memcmp(locks, untouchedLocks, sizeof(locks)) == 0, "an atfork hook wrote the lock array");
     Require(std::memcmp(info, untouchedInfo, sizeof(info)) == 0, "_rtld_addr_phdr wrote the phdr info");
+    SetupChecks();
     return 0;
 }

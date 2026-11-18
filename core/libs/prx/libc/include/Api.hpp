@@ -1172,6 +1172,7 @@ int APS5_VABI fileno_unlocked_nid_postfix(FileStream* stream);
 int APS5_VABI setvbuf_nid_postfix(FileStream* stream, char* buffer, int mode, std::size_t size);
 void APS5_VABI setbuf_nid_postfix(FileStream* stream, char* buffer);
 const char* APS5_VABI setlocale_nid_postfix(int, const char* locale);
+int APS5_VABI NewSetup_nid_no_patch(const void* table);
 int APS5_VABI _new_setup_nid_postfix(const void* table);
 GuestNewHandler APS5_VABI _ZSt15set_new_handlerPFvvE_nid_postfix(GuestNewHandler handler);
 GuestNewHandler APS5_VABI _ZSt15get_new_handlerv_nid_postfix();

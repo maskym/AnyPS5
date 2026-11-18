@@ -2,6 +2,7 @@
 #include "prx/libc/include/ApplicationHeap.hpp"
 #include "prx/libc/include/General.hpp"
 #include "prx/libSceLibcInternal/include/InventoryExports6.hpp"
+#include "prx/libSceLibcInternal/include/TimeGetFields.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdio>
@@ -55,6 +56,7 @@ int main() {
         _ZNSt24_Iostream_error_categoryD0Ev_nid_postfix,
         _ZNSt8messagesIcED0Ev_nid_postfix,
         _ZNSt9money_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEED0Ev_nid_postfix,
+        reinterpret_cast<Destructor>(&_ZNSt8time_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix),
     };
 
     for (Destructor destructor : destructors) {

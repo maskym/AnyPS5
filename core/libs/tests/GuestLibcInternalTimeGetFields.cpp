@@ -134,6 +134,8 @@ void CheckGroup1ConstructionAndLifetime() {
         Require(vtable->dateOrder(&storage.base) == 2, "wide time_get vtable dateOrder works");
         _ZNSt8time_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEED2Ev_nid_postfix(&storage.base);
         Require(storage.base.references == 2 && storage.untouchedSuffix == expectedSuffix, "wide time_get D2 preserves fields");
+        _ZNSt8time_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEED1Ev_nid_postfix(&storage.base);
+        Require(storage.base.references == 2 && storage.untouchedSuffix == expectedSuffix, "wide time_get D1 preserves fields");
     }
 
     auto* heapWideGet = static_cast<WideTimeGetStorage*>(_Znwm_nid_postfix(sizeof(WideTimeGetStorage)));
@@ -148,6 +150,7 @@ void CheckGroup1ConstructionAndLifetime() {
 
     GuestLocale::Facet charFacet{};
     _ZNSt8time_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEED2Ev_nid_postfix(&charFacet);
+    _ZNSt8time_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEED1Ev_nid_postfix(&charFacet);
 
     GuestLocale::LocinfoStorage info{};
     _ZNSt8_LocinfoC1EPKc_nid_postfix(&info, "C");
@@ -199,6 +202,9 @@ void CheckGroup1ConstructionAndLifetime() {
     Require(Throws([&] { _ZNSt8time_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEEC2EPKcm_nid_postfix(&invalidStorage.base, "en_US", 0); }), "wide time_get C2 non-C name throws");
     Require(Throws([] { _ZNSt8time_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEED2Ev_nid_postfix(nullptr); }), "char time_get D2 null throws");
     Require(Throws([] { _ZNSt8time_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEED2Ev_nid_postfix(nullptr); }), "wide time_get D2 null throws");
+    Require(Throws([] { _ZNSt8time_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix(nullptr); }), "char time_get D0 null throws");
+    Require(Throws([] { _ZNSt8time_getIcSt19istreambuf_iteratorIcSt11char_traitsIcEEED1Ev_nid_postfix(nullptr); }), "char time_get D1 null throws");
+    Require(Throws([] { _ZNSt8time_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEED1Ev_nid_postfix(nullptr); }), "wide time_get D1 null throws");
     Require(Throws([&] { _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1ERKSt8_Locinfom_nid_postfix(nullptr, &info, 0); }), "char time_put C1 null self throws");
     Require(Throws([&] { _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1ERKSt8_Locinfom_nid_postfix(&putFromLocinfo.base, nullptr, 0); }), "char time_put C1 null locinfo throws");
     Require(Throws([] { _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2Em_nid_postfix(nullptr, 0); }), "char time_put C2 null self throws");

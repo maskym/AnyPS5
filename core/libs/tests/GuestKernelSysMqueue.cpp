@@ -37,6 +37,7 @@ constexpr int ORdwr = 0x0002;
 constexpr int ONonblock = 0x0004;
 constexpr int OCreat = 0x0200;
 constexpr int OExcl = 0x0800;
+constexpr int DupFd = 0;
 
 void Require(bool condition, std::source_location location = std::source_location::current()) {
     if (condition) return;
@@ -309,6 +310,50 @@ void BadPointers() {
     Require(close_nid_postfix(queue) == 0 && kmq_unlink_nid_postfix(name.c_str()) == 0);
 }
 
+void Duplicates() {
+    const auto name = Name("dup");
+    const GuestMqAttr small{0, 3, 16, 0, {}};
+    const int queue = kmq_open_nid_postfix(name.c_str(), ORdwr | OCreat, 0600, &small);
+    Require(queue >= 0);
+    const int first = dup_nid_postfix(queue);
+    Require(first >= 0 && first != queue);
+    const int second = first + 5;
+    close_nid_postfix(second);
+    Require(dup2_nid_postfix(queue, second) == second);
+    const int third = fcntl_nid_postfix(queue, DupFd, second + 1);
+    Require(third > second);
+    unsigned priority = 0;
+    Require(kmq_timedsend_nid_postfix(first, "one", 3, 4, nullptr) == 0);
+    Require(Receive(second, &priority) == "one" && priority == 4);
+    Require(kmq_timedsend_nid_postfix(third, "two", 3, 6, nullptr) == 0);
+    Require(Receive(first, &priority) == "two" && priority == 6);
+    const GuestMqAttr nonblocking{ONonblock, 0, 0, 0, {}};
+    Require(kmq_setattr_nid_postfix(first, &nonblocking, nullptr) == 0);
+    GuestMqAttr attributes{};
+    Require(kmq_setattr_nid_postfix(queue, nullptr, &attributes) == 0 && attributes.flags == ONonblock);
+    Require(kmq_setattr_nid_postfix(third, nullptr, &attributes) == 0 && attributes.flags == ONonblock);
+    char buffer[16]{};
+    Require(kmq_timedreceive_nid_postfix(queue, buffer, sizeof(buffer), nullptr, nullptr) == -1 && Error() == Eagain);
+    Require(close_nid_postfix(queue) == 0);
+    Require(kmq_timedsend_nid_postfix(first, "three", 5, 2, nullptr) == 0);
+    Require(Receive(first, &priority) == "three" && priority == 2);
+    const auto path = "anyps5-mq-dup-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".bin";
+    { std::ofstream stream(path); stream << "x"; }
+    const int plain = open_nid_postfix(path.c_str(), 0, 0);
+    Require(plain >= 0);
+    Require(dup2_nid_postfix(plain, second) == second);
+    Require(kmq_timedsend_nid_postfix(second, "x", 1, 0, nullptr) == -1 && Error() == Ebadf);
+    const int plainCopy = dup_nid_postfix(plain);
+    Require(plainCopy >= 0);
+    Require(kmq_setattr_nid_postfix(plainCopy, nullptr, nullptr) == -1 && Error() == Ebadf);
+    Require(kmq_timedsend_nid_postfix(third, "four", 4, 1, nullptr) == 0);
+    Require(Receive(third, &priority) == "four" && priority == 1);
+    Require(close_nid_postfix(first) == 0 && close_nid_postfix(second) == 0 && close_nid_postfix(third) == 0);
+    Require(close_nid_postfix(plainCopy) == 0 && close_nid_postfix(plain) == 0);
+    Require(kmq_unlink_nid_postfix(name.c_str()) == 0);
+    std::filesystem::remove(path);
+}
+
 }
 
 int main() {
@@ -320,6 +365,7 @@ int main() {
     NullBuffer();
     FarDeadline();
     ConcurrentSetattr();
+    Duplicates();
     std::puts("message queues passed");
     return 0;
 }

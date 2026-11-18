@@ -141,6 +141,7 @@ private:
 
 using KernelEqueueRef = std::shared_ptr<KernelEqueuePrivate>;
 void EqueueDescriptorClosed(int descriptor);
+void EqueueDescriptorDuplicated(int from, int to);
 void KqueueDescriptorClosed(int descriptor);
 void EqueueDescriptorReadShut(int descriptor);
 void KqueueDescriptorReadShut(int descriptor);
@@ -150,6 +151,7 @@ int ReserveKqueueDescriptor();
 void RegisterKqueueDescriptor(int descriptor, KernelEqueueRef queue);
 KernelEqueueRef FindKqueueDescriptor(int descriptor);
 extern "C" void RegisterDescriptorCloseObserver_nid_no_patch(void (*observer)(int descriptor));
+extern "C" void RegisterDescriptorDuplicateObserver_nid_no_patch(void (*observer)(int from, int to));
 std::optional<bool> KqueueReadable(int descriptor);
 KernelEqueueEvent EqueueDescriptorEvent(int descriptor, int16_t filter, uint16_t flags, void* udata);
 void RequireVnodeNotes(uint32_t fflags);

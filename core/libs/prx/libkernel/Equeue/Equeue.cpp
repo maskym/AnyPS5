@@ -1064,6 +1064,32 @@ void EqueueDescriptorClosed(int descriptor) {
     NotifyDescriptorCloseObservers(descriptor);
 }
 
+struct DuplicateObserverRegistry {
+    std::mutex mutex;
+    std::vector<void (*)(int, int)> observers;
+};
+
+static DuplicateObserverRegistry& GetDuplicateObserverRegistry() {
+    static auto* registry = new DuplicateObserverRegistry;
+    return *registry;
+}
+
+extern "C" void RegisterDescriptorDuplicateObserver_nid_no_patch(void (*observer)(int from, int to)) {
+    auto& registry = GetDuplicateObserverRegistry();
+    std::lock_guard lock(registry.mutex);
+    registry.observers.push_back(observer);
+}
+
+void EqueueDescriptorDuplicated(int from, int to) {
+    auto& registry = GetDuplicateObserverRegistry();
+    std::vector<void (*)(int, int)> observers;
+    {
+        std::lock_guard lock(registry.mutex);
+        observers = registry.observers;
+    }
+    for (const auto observer : observers) observer(from, to);
+}
+
 void EqueueDescriptorReadShut(int descriptor) {
     KqueueDescriptorReadShut(descriptor);
 }

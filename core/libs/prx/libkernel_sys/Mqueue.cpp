@@ -96,8 +96,16 @@ void DescriptorClosed(int descriptor) {
     g_opens.erase(descriptor);
 }
 
+void DescriptorDuplicated(int from, int to) {
+    std::lock_guard lock(g_mqueueLock);
+    const auto found = g_opens.find(from);
+    if (found == g_opens.end()) return;
+    g_opens[to] = found->second;
+}
+
 const bool g_observerRegistered = [] {
     RegisterDescriptorCloseObserver_nid_no_patch(DescriptorClosed);
+    RegisterDescriptorDuplicateObserver_nid_no_patch(DescriptorDuplicated);
     return true;
 }();
 

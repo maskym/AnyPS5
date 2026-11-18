@@ -855,6 +855,7 @@ int File::DuplicateFrom(int fd, int start) {
     File::DuplicateDirectoryDescriptor(fd, duplicate);
     if (File::IsRandomDevice(fd)) File::RememberRandomDevice(duplicate);
     File::ShareDescriptor(fd, duplicate);
+    EqueueDescriptorDuplicated(fd, duplicate);
     return duplicate;
 #endif
 }
@@ -1034,6 +1035,7 @@ int APS5_VABI dup_nid_postfix(int d) {
     if (File::IsRandomDevice(d)) File::RememberRandomDevice(duplicate);
     File::ShareDescriptor(d, duplicate);
     DuplicateJitSharedMemory(d, duplicate);
+    EqueueDescriptorDuplicated(d, duplicate);
     return duplicate;
 }
 
@@ -1078,6 +1080,7 @@ int APS5_VABI dup2_nid_postfix(int from, int to) {
     positioned.unlock();
     File::ShareDescriptor(from, to);
     DuplicateJitSharedMemory(from, to);
+    EqueueDescriptorDuplicated(from, to);
     return to;
 #else
     if (from == to) {
@@ -1096,6 +1099,7 @@ int APS5_VABI dup2_nid_postfix(int from, int to) {
     if (sourceIsRandom) File::RememberRandomDevice(to);
     File::ShareDescriptor(from, to);
     DuplicateJitSharedMemory(from, to);
+    EqueueDescriptorDuplicated(from, to);
     return result;
 #endif
 }

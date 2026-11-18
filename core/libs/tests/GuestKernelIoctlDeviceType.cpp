@@ -4,9 +4,16 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+static int OpenNullDevice() { return ::_open("NUL", _O_RDONLY); }
+static int CloseNullDevice(int descriptor) { return ::_close(descriptor); }
+#else
 #include <fcntl.h>
 #include <unistd.h>
+static int OpenNullDevice() { return ::open("/dev/null", O_RDONLY); }
+static int CloseNullDevice(int descriptor) { return ::close(descriptor); }
 #endif
 
 namespace {
@@ -22,8 +29,7 @@ void Require(bool condition, const char* message) {
 }
 
 void AuditCharacterDeviceTypeQuery() {
-#ifndef _WIN32
-    const int null = ::open("/dev/null", O_RDONLY);
+    const int null = OpenNullDevice();
     Require(null >= 0, "opening the host null device failed");
 
     for (const auto call : {ioctl_nid_postfix, _ioctl_nid_postfix}) {
@@ -38,23 +44,18 @@ void AuditCharacterDeviceTypeQuery() {
             "FIODTYPE with an unmapped output argument must fail with EFAULT (14)");
     }
 
-    Require(::close(null) == 0, "closing the host null device failed");
+    Require(CloseNullDevice(null) == 0, "closing the host null device failed");
     for (const auto call : {ioctl_nid_postfix, _ioctl_nid_postfix}) {
         int type = 0;
         Require(call(null, DeviceTypeRequest, &type) == -1 && *__error_nid_postfix() == ErrorBadDescriptor,
             "FIODTYPE on a closed character device must fail with EBADF (9)");
     }
-#endif
 }
 
 } // namespace
 
 int main() {
-#ifndef _WIN32
     AuditCharacterDeviceTypeQuery();
     std::puts("FIODTYPE on a character device with no device type answers 0");
-#else
-    std::puts("no guest path opens the null device on Windows, so FIODTYPE on a character device stays unverified");
-#endif
     return 0;
 }

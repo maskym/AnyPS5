@@ -22,4 +22,9 @@ const std::error_category* APS5_VABI sceLibcInternalIostreamCategory_nid_no_patc
 }
 APS5_EXPORT("V23qt24VPVs", sceLibcInternalIostreamCategory_nid_no_patch);
 
+[[noreturn]] void APS5_VABI sceLibcInternalFilesystemErrorTwoPaths_nid_no_patch(const char* message, const GuestLocale::String* path1, const GuestLocale::String* path2, LibcException::ErrorCode code) {
+    FilesystemErrorTwoPaths_nid_no_patch(message, path1, path2, code);
+}
+APS5_EXPORT("Wut42WAe7Rw", sceLibcInternalFilesystemErrorTwoPaths_nid_no_patch);
+
 }

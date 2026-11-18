@@ -1,0 +1,12 @@
+if(BUILD_TESTING)
+    add_test_executable(guest_locale_destructor_tests ${LIBS_INCLUDE_DIR}/tests/GuestLocaleDestructor.cpp)
+    target_include_directories(guest_locale_destructor_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    target_link_libraries(guest_locale_destructor_tests PRIVATE libc libSceLibcInternal ${CMAKE_DL_LIBS})
+    configure_windows_unwind(guest_locale_destructor_tests)
+    add_test(NAME guest_locale_destructor COMMAND guest_locale_destructor_tests $<TARGET_FILE:libc> $<TARGET_FILE:libSceLibcInternal>)
+    set_tests_properties(guest_locale_destructor PROPERTIES TIMEOUT 20)
+    if(WIN32)
+        set_tests_properties(guest_locale_destructor PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libc>;PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceLibcInternal>")
+    endif()
+endif()

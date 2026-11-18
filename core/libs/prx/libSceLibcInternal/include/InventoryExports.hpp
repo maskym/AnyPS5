@@ -9,6 +9,8 @@ struct SystemErrorObject;
 struct ErrorCode;
 }
 
+struct GuestLocaleFacade;
+
 extern "C" {
 
 int APS5_VABI libSceLibcInternalInventory_000_nid_no_patch();
@@ -76,7 +78,7 @@ int APS5_VABI libSceLibcInternalInventory_078_nid_no_patch();
 int APS5_VABI libSceLibcInternalInventory_079_nid_no_patch();
 int APS5_VABI libSceLibcInternalInventory_081_nid_no_patch();
 int APS5_VABI libSceLibcInternalInventory_082_nid_no_patch();
-int APS5_VABI libSceLibcInternalInventory_083_nid_no_patch();
+void APS5_VABI libSceLibcInternalInventory_083_nid_no_patch(GuestLocaleFacade* self);
 int APS5_VABI libSceLibcInternalInventory_084_nid_no_patch();
 int APS5_VABI libSceLibcInternalInventory_085_nid_no_patch();
 int APS5_VABI libSceLibcInternalInventory_086_nid_no_patch();

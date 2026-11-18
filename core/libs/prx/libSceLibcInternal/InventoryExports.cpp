@@ -6,6 +6,7 @@
 #include "prx/libc/include/General.hpp"
 #include "prx/libSceLibcInternal/include/InventoryExports6.hpp"
 #include <mutex>
+#include <stdexcept>
 
 namespace {
 
@@ -360,8 +361,11 @@ int APS5_VABI libSceLibcInternalInventory_082_nid_no_patch() {
 }
 APS5_EXPORT("So6gSmJMYDs", libSceLibcInternalInventory_082_nid_no_patch);
 
-int APS5_VABI libSceLibcInternalInventory_083_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
+void APS5_VABI libSceLibcInternalInventory_083_nid_no_patch(GuestLocaleFacade* self) {
+    if (self == nullptr) throw std::invalid_argument("locale destructor: null locale");
+    if (auto* implementation = self->implementation) {
+        if (auto* released = implementation->base.vtable->release(&implementation->base)) released->vtable->deleteObject(released);
+    }
 }
 APS5_EXPORT("pMWnITHysPc", libSceLibcInternalInventory_083_nid_no_patch);
 

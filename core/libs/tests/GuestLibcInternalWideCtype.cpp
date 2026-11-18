@@ -217,6 +217,23 @@ void CheckScanNot(Fixture& first, Fixture& second, WideVtable& firstTable) {
     Require(sceLibcInternalWideCtypeDoScanNot_nid_no_patch(AsFacet(first), ClassA, text.data() + 2, text.data() + 2) == text.data() + 2, "empty scan range returns its end");
 }
 
+void CheckScanIs(Fixture& first, Fixture& second, WideVtable& firstTable) {
+    first.classes.fill(0);
+    first.classes[static_cast<unsigned char>('A')] = ClassA;
+    second.classes.fill(0);
+    second.classes[static_cast<unsigned char>('A')] = ClassA;
+    StoreFunction(firstTable, 4, DoIsFunction(OverrideDoIs));
+    const std::array<char16_t, 3> text{u'!', u'!', u'B'};
+    const auto before = first.overrideCalls;
+    Require(sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), ClassA, text.data(), text.data() + text.size()) == text.data() + 2, "scan_is dispatches through the current do_is virtual");
+    Require(first.overrideCalls == before + 3, "scan_is invokes the selected virtual once per examined character");
+    StoreFunction(firstTable, 4, DoIsFunction(sceLibcInternalWideCtypeDoIs_nid_no_patch));
+    const std::array<char16_t, 3> secondText{u'!', u'B', u'A'};
+    Require(sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(second), ClassA, secondText.data(), secondText.data() + secondText.size()) == secondText.data() + 2, "scan_is uses the second facet's do_is entry and table");
+    Require(sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), 0, secondText.data(), secondText.data() + secondText.size()) == secondText.data() + secondText.size(), "scan_is with a zero mask returns the end");
+    Require(sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), ClassA, text.data() + 1, text.data() + 1) == text.data() + 1, "empty scan_is range returns its end");
+}
+
 void CheckUpper(Fixture& first) {
     first.upper.fill(0);
     first.upper[static_cast<unsigned char>('a')] = -2;
@@ -263,11 +280,13 @@ void CheckGuestPointers(Fixture& first) {
     Require(masks == std::array<short, 3>{-1, -1, -1}, "rejected range classification writes nothing");
     RequireRejected([&] { sceLibcInternalWideCtypeDoIsRange_nid_no_patch(AsFacet(first), text.data(), text.data() + 3, unmappedMasks); }, "range classification rejects an unwritable destination");
     RequireRejected([&] { sceLibcInternalWideCtypeDoScanNot_nid_no_patch(AsFacet(first), ClassA, unmapped, unmapped + 3); }, "scan_not rejects an unreadable range");
+    RequireRejected([&] { sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), ClassA, unmapped, unmapped + 3); }, "scan_is rejects an unreadable range");
     RequireRejected([&] { sceLibcInternalWideCtypeDoToupperRange_nid_no_patch(AsFacet(first), unmapped, unmapped + 3); }, "range uppercase rejects an unreadable range");
     Require(first.narrowCalls == before + 3, "only the unwritable destination case classified its characters");
     Require(text == std::array<char16_t, 3>{u'a', u'b', u'!'}, "rejected calls leave the characters alone");
     Require(sceLibcInternalWideCtypeDoIsRange_nid_no_patch(AsFacet(first), unmapped, unmapped, unmappedMasks) == unmapped, "an empty classification range reads and writes nothing");
     Require(sceLibcInternalWideCtypeDoScanNot_nid_no_patch(AsFacet(first), ClassA, unmapped, unmapped) == unmapped, "an empty scan range reads nothing");
+    Require(sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), ClassA, unmapped, unmapped) == unmapped, "an empty scan_is range reads nothing");
     Require(sceLibcInternalWideCtypeDoToupperRange_nid_no_patch(AsFacet(first), unmapped, unmapped) == unmapped, "an empty uppercase range reads nothing");
 }
 
@@ -278,6 +297,7 @@ void CheckChunkedRanges(Fixture& first) {
     Capped([&] {
         RequireRejected([&] { sceLibcInternalWideCtypeDoIsRange_nid_no_patch(AsFacet(first), unmapped, unmapped + huge, masks.data()); }, "range classification rejects an oversized unmapped range");
         RequireRejected([&] { sceLibcInternalWideCtypeDoScanNot_nid_no_patch(AsFacet(first), ClassA, unmapped, unmapped + huge); }, "scan_not rejects an oversized unmapped range");
+        RequireRejected([&] { sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), ClassA, unmapped, unmapped + huge); }, "scan_is rejects an oversized unmapped range");
         RequireRejected([&] { sceLibcInternalWideCtypeDoToupperRange_nid_no_patch(AsFacet(first), unmapped, unmapped + huge); }, "range uppercase rejects an oversized unmapped range");
 #ifndef _WIN32
         GuardedPage page;
@@ -299,6 +319,11 @@ void CheckChunkedRanges(Fixture& first) {
         text[1] = u'A';
         text[2] = u'A';
         RequireRejected([&] { sceLibcInternalWideCtypeDoScanNot_nid_no_patch(AsFacet(first), ClassA, text, text + huge); }, "scan_not rejects an oversized range of matches before a guard page");
+        Require(sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), ClassA, text, text + huge) == text, "scan_is stops at the first match before a guard page");
+        text[0] = u'!';
+        text[1] = u'!';
+        text[2] = u'!';
+        RequireRejected([&] { sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), ClassA, text, text + huge); }, "scan_is rejects an oversized range of mismatches before a guard page");
 #endif
     });
     Require(masks == std::array<short, 3>{-1, -1, -1}, "rejected oversized classification writes nothing");
@@ -317,6 +342,12 @@ void CheckChunkedRanges(Fixture& first) {
     Capped([&] {
         Require(sceLibcInternalWideCtypeDoScanNot_nid_no_patch(AsFacet(first), ClassA, letters.data(), letters.data() + letters.size()) == letters.data() + 0x1005, "chunked scan_not stops in a later chunk");
         Require(sceLibcInternalWideCtypeDoScanNot_nid_no_patch(AsFacet(first), ClassA, letters.data(), letters.data() + 0x1005) == letters.data() + 0x1005, "chunked scan_not returns the end when every character matches");
+    });
+    std::vector<char16_t> marks(text.size(), u'!');
+    marks[0x1005] = u'A';
+    Capped([&] {
+        Require(sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), ClassA, marks.data(), marks.data() + marks.size()) == marks.data() + 0x1005, "chunked scan_is stops in a later chunk");
+        Require(sceLibcInternalWideCtypeDoScanIs_nid_no_patch(AsFacet(first), ClassA, marks.data(), marks.data() + 0x1005) == marks.data() + 0x1005, "chunked scan_is returns the end when no character matches");
     });
     auto upper = text;
     Capped([&] { Require(sceLibcInternalWideCtypeDoToupperRange_nid_no_patch(AsFacet(first), upper.data(), upper.data() + upper.size()) == upper.data() + upper.size(), "chunked uppercase returns the end"); });
@@ -338,6 +369,7 @@ int main() {
     Initialize(second, secondTable, false);
     CheckClassification(first, second);
     CheckScanNot(first, second, firstTable);
+    CheckScanIs(first, second, firstTable);
     CheckUpper(first);
     CheckGuestPointers(first);
     CheckChunkedRanges(first);

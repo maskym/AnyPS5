@@ -201,7 +201,6 @@ static void CheckSizeLimits() {
 }
 
 static void CheckOrdinaryCharacterScans() {
-#ifndef _WIN32
     using Scanner = int (APS5_VABI*)(const char*, const char*, ...);
     for (const Scanner scan : {sscanf_nid_postfix, ScanList}) {
         for (const char* input : {"", "a", "ab", "a b"}) {
@@ -245,7 +244,6 @@ static void CheckOrdinaryCharacterScans() {
             }
         }
     }
-#endif
 }
 
 static bool CheckWidePrecision() {
@@ -859,10 +857,8 @@ __attribute__((noinline)) static void APS5_VABI RunChecks() {
         Require(sscanf_nid_postfix("a b", "%2$ls", untouched) == 0 && untouched[0] == u'!');
         Require(sscanf_nid_postfix("5 ab", "%d %1$ls", &number, untouched) == 1 && number == 5 && untouched[0] == u'!');
     }
-#ifndef _WIN32
     char narrow[8] = {};
     Require(sscanf_nid_postfix("ab%", "%7[^%ls]", narrow) == 1 && std::strcmp(narrow, "ab") == 0);
-#endif
 #ifdef _WIN32
     char freebsd[64];
     Require(snprintf_nid_postfix(freebsd, sizeof(freebsd), "%qd|%qu|%qx|%qo") == 15 &&

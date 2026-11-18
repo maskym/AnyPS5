@@ -1,13 +1,29 @@
+#include "prx/libSceLibcInternal/include/Api.hpp"
+#include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/GuestLocale.hpp"
 #include "prx/libc/include/General.hpp"
 #include "SceTypes.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 
 namespace {
 
 const GuestLocale::NumPutVtable& NumPut(const GuestLocale::Facet* self) {
     return *reinterpret_cast<const GuestLocale::NumPutVtable*>(self->vtable);
+}
+
+void ConstructNumPutChar(GuestLocale::Facet* self, std::size_t refs, const char* function) {
+    if (self == nullptr) throw std::invalid_argument(std::string(function) + ": null object");
+    self->vtable = reinterpret_cast<const GuestLocale::FacetVtable*>(&_ZTVSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE_nid_postfix[2]);
+    self->references = static_cast<std::uint32_t>(refs);
+    self->reserved = static_cast<std::uint32_t>(static_cast<std::uint64_t>(refs) >> 32);
+}
+
+void ConstructNumPutCharFromLocinfo(GuestLocale::Facet* self, const GuestLocale::LocinfoStorage* info, std::size_t refs, const char* function) {
+    if (info == nullptr) throw std::invalid_argument(std::string(function) + ": null _Locinfo");
+    ConstructNumPutChar(self, refs, function);
 }
 
 }
@@ -83,5 +99,26 @@ std::size_t APS5_VABI sceLibcInternalWideTimePutGetcat_nid_no_patch(GuestLocale:
     return LibcWideTimePutGetcat_nid_no_patch(facet, locale);
 }
 APS5_EXPORT("bF2uVCqVhBY", sceLibcInternalWideTimePutGetcat_nid_no_patch);
+
+void APS5_VABI _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1Em_nid_postfix(GuestLocale::Facet* self, std::size_t refs) {
+    ConstructNumPutChar(self, refs, "num_put<char>::num_put");
+}
+
+void APS5_VABI _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2Em_nid_postfix(GuestLocale::Facet* self, std::size_t refs) {
+    ConstructNumPutChar(self, refs, "num_put<char>::num_put");
+}
+
+void APS5_VABI _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1ERKSt8_Locinfom_nid_postfix(GuestLocale::Facet* self, const GuestLocale::LocinfoStorage* info, std::size_t refs) {
+    ConstructNumPutCharFromLocinfo(self, info, refs, "num_put<char>::num_put");
+}
+
+void APS5_VABI _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2ERKSt8_Locinfom_nid_postfix(GuestLocale::Facet* self, const GuestLocale::LocinfoStorage* info, std::size_t refs) {
+    ConstructNumPutCharFromLocinfo(self, info, refs, "num_put<char>::num_put");
+}
+
+void APS5_VABI _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix(GuestLocale::Facet* self) {
+    if (self == nullptr) throw std::invalid_argument("num_put<char>::~num_put: null object");
+    _ZdlPv_nid_postfix(self);
+}
 
 }

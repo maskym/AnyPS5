@@ -3,6 +3,7 @@
 #include "prx/libc/include/GuestLocale.hpp"
 #include "prx/libc/include/GuestTime.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libSceLibcInternal/include/Api.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -34,7 +35,14 @@ void Require(bool condition, const char* message) {
 }
 
 void* APS5_VABI TestAllocate(std::size_t size) { return std::malloc(size); }
-void APS5_VABI TestFree(void* pointer) { std::free(pointer); }
+void* g_lastFreed = nullptr;
+std::size_t g_freeCount = 0;
+
+void APS5_VABI TestFree(void* pointer) {
+    g_lastFreed = pointer;
+    ++g_freeCount;
+    std::free(pointer);
+}
 void* APS5_VABI TestCalloc(std::size_t count, std::size_t size) { return std::calloc(count, size); }
 void* APS5_VABI TestReallocate(void* pointer, std::size_t size) { return std::realloc(pointer, size); }
 void* APS5_VABI TestAlign(std::size_t, std::size_t size) { return std::malloc(size); }
@@ -60,6 +68,27 @@ TFunction Export(const char* nid) {
 #endif
     Require(address != nullptr, "missing export");
     return reinterpret_cast<TFunction>(address);
+}
+
+template<typename TFunction>
+TFunction ResolveName(const char* symbol) {
+#ifdef _WIN32
+    auto* address = reinterpret_cast<void*>(GetProcAddress(g_library, symbol));
+#else
+    void* address = dlsym(g_library, symbol);
+#endif
+    Require(address != nullptr, "missing exported symbol");
+    return reinterpret_cast<TFunction>(address);
+}
+
+template<typename TCall>
+void RequireRejected(TCall call, const char* message) {
+    try {
+        call();
+    } catch (const std::invalid_argument&) {
+        return;
+    }
+    Require(false, message);
 }
 
 struct TestStreambuf {
@@ -221,6 +250,71 @@ void CheckLibcNumPut() {
     Export<NumPutExport<bool>>("nftirmo6hBg")(facet, GuestLocale::OutputIterator{false, &stream.buffer}, &ios, '*', true);
     Require(stream.accepted == "0.1251", "put(double) and put(bool) format through the libc facet");
     facet->vtable->deleteObject(facet);
+}
+
+using NumPutRefsCtor = void (APS5_VABI*)(GuestLocale::Facet*, std::size_t);
+using NumPutLocinfoCtor = void (APS5_VABI*)(GuestLocale::Facet*, const GuestLocale::LocinfoStorage*, std::size_t);
+using NumPutDeletingDtor = void (APS5_VABI*)(GuestLocale::Facet*);
+
+void VerifyConstructedNumPut(GuestLocale::Facet* facet, std::size_t refs) {
+    const auto* expectedVtable = reinterpret_cast<const GuestLocale::FacetVtable*>(&_ZTVSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEE_nid_postfix[2]);
+    Require(facet->vtable == expectedVtable, "num_put<char> constructor installs the num_put<char> vtable");
+    Require(facet->references == static_cast<std::uint32_t>(refs), "num_put<char> constructor stores the low 32 bits of refs");
+    Require(facet->reserved == static_cast<std::uint32_t>(static_cast<std::uint64_t>(refs) >> 32), "num_put<char> constructor stores the high 32 bits of refs");
+    Require(PutLibcNumber(facet, 0, 6, -42) == "***-42", "put(long) formats through the constructed num_put<char>");
+}
+
+void RequireDeletingDestructorFrees(NumPutDeletingDtor destroy, GuestLocale::Facet* facet, const char* message) {
+    const std::size_t beforeFrees = g_freeCount;
+    g_lastFreed = nullptr;
+    destroy(facet);
+    Require(g_freeCount == beforeFrees + 1 && g_lastFreed == facet, message);
+}
+
+void CheckNumPutConstructors() {
+    const std::size_t refs = (std::size_t{0x12345678u} << 32) | 7u;
+    const GuestLocale::LocinfoStorage locinfo{};
+
+    for (const NumPutRefsCtor ctor : {_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1Em_nid_postfix, _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2Em_nid_postfix}) {
+        GuestLocale::Facet facet{};
+        ctor(&facet, refs);
+        VerifyConstructedNumPut(&facet, refs);
+        RequireRejected([&] { ctor(nullptr, refs); }, "num_put<char> refs constructor rejects null self");
+    }
+
+    for (const NumPutLocinfoCtor ctor : {_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1ERKSt8_Locinfom_nid_postfix, _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2ERKSt8_Locinfom_nid_postfix}) {
+        GuestLocale::Facet facet{};
+        ctor(&facet, &locinfo, refs);
+        VerifyConstructedNumPut(&facet, refs);
+        RequireRejected([&] { ctor(nullptr, &locinfo, refs); }, "num_put<char> _Locinfo constructor rejects null self");
+        GuestLocale::Facet untouched{};
+        RequireRejected([&] { ctor(&untouched, nullptr, refs); }, "num_put<char> _Locinfo constructor rejects null _Locinfo");
+        Require(untouched.vtable == nullptr && untouched.references == 0 && untouched.reserved == 0, "a rejected _Locinfo leaves the facet unwritten");
+    }
+
+    auto* heapFacet = static_cast<GuestLocale::Facet*>(_Znwm_nid_postfix(sizeof(GuestLocale::Facet)));
+    _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1Em_nid_postfix(heapFacet, 1);
+    RequireDeletingDestructorFrees(_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix, heapFacet, "num_put<char> D0 frees the facet once");
+    RequireRejected([] { _ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix(nullptr); }, "num_put<char> D0 rejects null self");
+
+    const auto nidC1Refs = ResolveName<NumPutRefsCtor>("_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1Em_nid_postfix");
+    const auto nidC2Refs = ResolveName<NumPutRefsCtor>("_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2Em_nid_postfix");
+    const auto nidC1Locinfo = ResolveName<NumPutLocinfoCtor>("_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1ERKSt8_Locinfom_nid_postfix");
+    const auto nidC2Locinfo = ResolveName<NumPutLocinfoCtor>("_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2ERKSt8_Locinfom_nid_postfix");
+    const auto nidD0 = ResolveName<NumPutDeletingDtor>("_ZNSt7num_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEED0Ev_nid_postfix");
+    for (const NumPutRefsCtor ctor : {nidC1Refs, nidC2Refs}) {
+        auto* facet = static_cast<GuestLocale::Facet*>(_Znwm_nid_postfix(sizeof(GuestLocale::Facet)));
+        ctor(facet, 3);
+        VerifyConstructedNumPut(facet, 3);
+        RequireDeletingDestructorFrees(nidD0, facet, "the exported num_put<char> D0 frees the exported-constructed facet once");
+    }
+    for (const NumPutLocinfoCtor ctor : {nidC1Locinfo, nidC2Locinfo}) {
+        auto* facet = static_cast<GuestLocale::Facet*>(_Znwm_nid_postfix(sizeof(GuestLocale::Facet)));
+        ctor(facet, &locinfo, 5);
+        VerifyConstructedNumPut(facet, 5);
+        RequireDeletingDestructorFrees(nidD0, facet, "the exported num_put<char> D0 frees the _Locinfo-constructed facet once");
+    }
+    RequireRejected([&] { nidD0(nullptr); }, "the exported num_put<char> D0 rejects null self");
 }
 
 struct TimeCall {
@@ -657,6 +751,7 @@ int main(int argc, char** argv) {
 
     CheckNumPutForwarding();
     CheckLibcNumPut();
+    CheckNumPutConstructors();
     CheckTimePutForwarding();
     CheckPatternWalk();
     CheckStreamCtype();

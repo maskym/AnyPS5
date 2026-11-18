@@ -247,12 +247,6 @@ int APS5_VABI _ZNSt6locale7_LocimpC2Eb_nid_postfix() {
     return 0;
 }
 
-int APS5_VABI sceLibcInternalUnknown6_070_1gYJIrfHxkQ_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-APS5_EXPORT("1gYJIrfHxkQ", sceLibcInternalUnknown6_070_1gYJIrfHxkQ_nid_no_patch);
-
 void APS5_VABI sceLibcInternalUnknown6_071_CiD6mBPDZrA_nid_no_patch(void* self) {
     (void)self;
 }

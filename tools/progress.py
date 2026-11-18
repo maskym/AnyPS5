@@ -1310,7 +1310,7 @@ def regenerate_isa_forms(xml):
     forms = shader_scan.parse_isa_xml(text)
     if not forms:
         raise ValueError(f"{xml}: ISA XML has no recognized instruction forms")
-    ISA_FORMS.write_text("\n".join(header + [" ".join(map(str, form)) for form in forms]) + "\n", encoding="utf-8")
+    ISA_FORMS.write_text("\n".join(header + [" ".join(map(str, form)) for form in forms]) + "\n", encoding="utf-8", newline="\n")
     print(f"{ISA_FORMS}: {len(forms)} forms")
     return 0
 

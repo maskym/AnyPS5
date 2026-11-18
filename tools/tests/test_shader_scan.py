@@ -166,6 +166,7 @@ class IsaTests(unittest.TestCase):
             self.assertIn(hashlib.sha256(xml.read_bytes()).hexdigest(), regenerated)
             self.assertIn("release 2026-02-20", regenerated)
             self.assertIn("Permission is hereby granted", regenerated)
+            self.assertNotIn(b"\r", table.read_bytes())
 
     def test_wrong_architecture_and_missing_metadata_preserve_the_inventory(self):
         variants = [ISA_XML.replace("AMD RDNA 2", "AMD RDNA 1"), ISA_XML.replace("<License>MIT</License>", ""),

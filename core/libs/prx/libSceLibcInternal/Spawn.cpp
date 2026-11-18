@@ -278,7 +278,7 @@ std::vector<wchar_t> ChildEnvironment(char* const* environment) {
 int SpawnChild(const char* function, const std::string& guest, PosixSpawnFileActions* const* actions,
     PosixSpawnAttributes* const* attributes, std::int32_t* processId, char* const* arguments, char* const* environment) {
     const auto target = ConvertedExecutableTarget(function, guest);
-    if (const std::uint32_t attributes_flags = SpawnAttributeFlags(attributes); attributes_flags != 0)
+    if (const std::uint32_t attributes_flags = SpawnAttributeFlags(attributes); (attributes_flags & ~SpawnFlagResetIds) != 0)
         NotImplemented_nid_no_patch(("posix_spawn: the attribute flags " + HexFlag(attributes_flags) + " on this host").c_str());
     ChildStreams streams;
     const DWORD identifiers[] = {STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE};

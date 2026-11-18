@@ -256,7 +256,7 @@ static std::filesystem::path OwnExecutablePath() {
 }
 
 static std::int32_t SpawnChildExplicit(const char* role, std::int32_t* processId, bool usePath = false,
-    PosixSpawnFileActions** actions = nullptr, int expectedResult = 0) {
+    PosixSpawnFileActions** actions = nullptr, int expectedResult = 0, PosixSpawnAttributes** attributes = nullptr) {
     const auto own = OwnExecutablePath();
     const auto target = own.parent_path() / std::filesystem::path(reinterpret_cast<const char8_t*>(("child.bin" + own.extension().string()).c_str()));
     std::error_code error;
@@ -291,9 +291,9 @@ static std::int32_t SpawnChildExplicit(const char* role, std::int32_t* processId
         environment.push_back(entry.data());
     environment.push_back(nullptr);
     if (usePath) {
-        Check(posix_spawnp_nid_postfix(processId, program, actions, nullptr, arguments, environment.data()) == expectedResult);
+        Check(posix_spawnp_nid_postfix(processId, program, actions, attributes, arguments, environment.data()) == expectedResult);
     } else {
-        Check(posix_spawn_nid_postfix(processId, program, actions, nullptr, arguments, environment.data()) == expectedResult);
+        Check(posix_spawn_nid_postfix(processId, program, actions, attributes, arguments, environment.data()) == expectedResult);
     }
     return processId != nullptr ? *processId : 0;
 }
@@ -386,6 +386,36 @@ static void CheckSpawnedChild(const char* role, int expectedCode) {
     status = -1;
     Check(waitpid_nid_postfix(processId, &status, 0) == -1 && *__error_nid_postfix() == 10);
     CleanupChild();
+}
+
+static void CheckSpawnResetIds() {
+    PosixSpawnAttributes* attributes = nullptr;
+    Check(posix_spawnattr_init_nid_postfix(&attributes) == 0);
+    Check(posix_spawnattr_setflags_nid_postfix(&attributes, 1) == 0);
+    for (const bool usePath : {false, true}) {
+        std::int32_t processId = -1;
+        Check(SpawnChildExplicit("child-exit-42", &processId, usePath, nullptr, 0, &attributes) > 0);
+        int status = -1;
+        Check(waitpid_nid_postfix(processId, &status, 0) == processId);
+        Check((status & 0x7f) == 0 && ((status >> 8) & 0xff) == 42);
+#ifdef _WIN32
+        char program[] = "/app0/child.bin";
+        char* arguments[] = {program, nullptr};
+        const std::pair<std::int16_t, const char*> unsupported[] = {{2, "0x2"}, {3, "0x3"}, {-1, "0xffff"}};
+        for (const auto& [flags, text] : unsupported) {
+            Check(posix_spawnattr_setflags_nid_postfix(&attributes, flags) == 0);
+            std::int32_t rejected = 77;
+            Check(ReportsNotImplemented([&] {
+                if (usePath) posix_spawnp_nid_postfix(&rejected, program, nullptr, &attributes, arguments, nullptr);
+                else posix_spawn_nid_postfix(&rejected, program, nullptr, &attributes, arguments, nullptr);
+            }, std::string("posix_spawn: the attribute flags ") + text + " on this host not implemented"));
+            Check(rejected == 77);
+        }
+        Check(posix_spawnattr_setflags_nid_postfix(&attributes, 1) == 0);
+#endif
+        CleanupChild();
+    }
+    Check(posix_spawnattr_destroy_nid_postfix(&attributes) == 0);
 }
 
 static void CheckConcurrentWaiters() {
@@ -491,6 +521,7 @@ int main() {
     CheckSpawnNullProcessId(false);
     CheckSpawnNullProcessId(true);
     CheckSpawnedChild("child-exit-42", 42);
+    CheckSpawnResetIds();
     CheckSpawnedChild("child-sleep", 43);
     CheckSpawnedChild("child-exit-neg", 255);
     CheckConcurrentWaiters();

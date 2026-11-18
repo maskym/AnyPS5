@@ -4,8 +4,11 @@
 #include "prx/libc/include/Api.hpp"
 #include "prx/libc/include/CodecvtUtf.hpp"
 #include "prx/libc/include/General.hpp"
+#include "prx/libc/include/GuestLocale.hpp"
 #include "prx/libSceLibcInternal/include/InventoryExports6.hpp"
+#include <atomic>
 #include <mutex>
+#include <stdexcept>
 
 namespace {
 
@@ -325,13 +328,15 @@ int APS5_VABI libSceLibcInternalInventory_074_nid_no_patch() {
 }
 APS5_EXPORT("K-5mtupQZ4g", libSceLibcInternalInventory_074_nid_no_patch);
 
-int APS5_VABI libSceLibcInternalInventory_075_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
+GuestLocale::Facet* APS5_VABI libSceLibcInternalInventory_075_nid_no_patch(GuestLocale::Facet* self) {
+    if (self == nullptr) throw std::invalid_argument("locale::facet::_Decref: null facet");
+    return std::atomic_ref<std::uint32_t>(self->references).fetch_sub(1) == 1 ? self : nullptr;
 }
 APS5_EXPORT("AgxEl+HeWRQ", libSceLibcInternalInventory_075_nid_no_patch);
 
-int APS5_VABI libSceLibcInternalInventory_076_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
+void APS5_VABI libSceLibcInternalInventory_076_nid_no_patch(GuestLocale::Facet* self) {
+    if (self == nullptr) throw std::invalid_argument("locale::facet::_Incref: null facet");
+    std::atomic_ref<std::uint32_t>(self->references).fetch_add(1);
 }
 APS5_EXPORT("-EgSegeAKl4", libSceLibcInternalInventory_076_nid_no_patch);
 

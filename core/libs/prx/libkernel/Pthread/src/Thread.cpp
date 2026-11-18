@@ -47,20 +47,6 @@
 #endif
 #endif
 
-#ifdef __linux__
-#include <sys/syscall.h>
-#else
-static const auto initialThreadId = std::this_thread::get_id();
-#endif
-
-extern "C" bool IsInitialPthread_nid_no_patch() {
-#ifdef __linux__
-    return ::syscall(SYS_gettid) == ::getpid();
-#else
-    return std::this_thread::get_id() == initialThreadId;
-#endif
-}
-
 static constexpr int SCE_OK = 0;
 static constexpr std::size_t GUEST_THREAD_NAME_CAPACITY = 32;
 static constexpr int GUEST_EINVAL = 22;
@@ -72,9 +58,68 @@ static constexpr std::uint16_t GUEST_THREAD_FPU_CONTROL = 0x037f;
 
 #ifdef _WIN32
 #include <windows.h>
+#include <tlhelp32.h>
 #include <process.h>
 #include <immintrin.h>
 #endif
+
+#ifdef __linux__
+#include <sys/syscall.h>
+#elif defined(_WIN32)
+static DWORD FindInitialProcessThreadId() {
+    const DWORD self = GetCurrentProcessId();
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+        throw std::system_error(static_cast<int>(GetLastError()), std::system_category(), "IsInitialPthread: CreateToolhelp32Snapshot");
+    THREADENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+    HANDLE earliestHandle = nullptr;
+    DWORD earliestId = 0;
+    std::uint64_t earliestCreation = 0;
+    for (BOOL more = Thread32First(snapshot, &entry); more; more = Thread32Next(snapshot, &entry)) {
+        if (entry.th32OwnerProcessID != self) continue;
+        const HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, entry.th32ThreadID);
+        if (thread == nullptr) continue;
+        FILETIME creation{};
+        FILETIME exit{};
+        FILETIME kernel{};
+        FILETIME user{};
+        if (!GetThreadTimes(thread, &creation, &exit, &kernel, &user)) {
+            CloseHandle(thread);
+            continue;
+        }
+        const std::uint64_t created = (static_cast<std::uint64_t>(creation.dwHighDateTime) << 32) | creation.dwLowDateTime;
+        if (earliestHandle == nullptr || created < earliestCreation) {
+            if (earliestHandle != nullptr) CloseHandle(earliestHandle);
+            earliestHandle = thread;
+            earliestId = entry.th32ThreadID;
+            earliestCreation = created;
+        } else {
+            CloseHandle(thread);
+        }
+    }
+    CloseHandle(snapshot);
+    if (earliestHandle == nullptr) throw std::runtime_error("IsInitialPthread: the process has no thread in the thread snapshot");
+    return earliestId;
+}
+
+static DWORD InitialProcessThreadId() {
+    static const DWORD initialThreadId = FindInitialProcessThreadId();
+    return initialThreadId;
+}
+#else
+static const auto initialThreadId = std::this_thread::get_id();
+#endif
+
+extern "C" bool IsInitialPthread_nid_no_patch() {
+#ifdef __linux__
+    return ::syscall(SYS_gettid) == ::getpid();
+#elif defined(_WIN32)
+    return GetCurrentThreadId() == InitialProcessThreadId();
+#else
+    return std::this_thread::get_id() == initialThreadId;
+#endif
+}
 
 struct ThreadArgs {
     PthreadEntry entry;

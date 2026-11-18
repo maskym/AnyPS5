@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
     const auto directory = std::filesystem::absolute(argv[1]);
     const bool patched = std::strcmp(argv[2], "patched") == 0;
     const std::string test = argv[3];
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
     if (test == "main_late_load") {
         int (APS5_VABI* isMain)() = nullptr;
         int (APS5_VABI* sceIsMain)() = nullptr;

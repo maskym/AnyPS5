@@ -158,6 +158,11 @@ void CheckGroup1ConstructionAndLifetime() {
     Require(putFromLocinfo.base.vtable != nullptr && putFromLocinfo.base.references == 3, "time_put<char> C1 locinfo ctor");
     Require(std::memcmp(&putFromLocinfo.names, expectedTimes, sizeof(*expectedTimes)) == 0, "time_put<char> C1 populates TimeInfo");
 
+    TimePutCharStorage putFromLocinfoBase{};
+    _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2ERKSt8_Locinfom_nid_postfix(&putFromLocinfoBase.base, &info, 3);
+    Require(putFromLocinfoBase.base.vtable == putFromLocinfo.base.vtable && putFromLocinfoBase.base.references == 3, "time_put<char> C2 locinfo ctor matches C1");
+    Require(std::memcmp(&putFromLocinfoBase.names, expectedTimes, sizeof(*expectedTimes)) == 0, "time_put<char> C2 locinfo populates TimeInfo");
+
     TimePutCharStorage putDefault{};
     _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2Em_nid_postfix(&putDefault.base, 1);
     Require(putDefault.base.vtable != nullptr && putDefault.base.references == 1, "time_put<char> C2 default ctor");
@@ -201,6 +206,8 @@ void CheckGroup1ConstructionAndLifetime() {
     Require(Throws([] { _ZNSt8time_getIwSt19istreambuf_iteratorIwSt11char_traitsIwEEED2Ev_nid_postfix(nullptr); }), "wide time_get D2 null throws");
     Require(Throws([&] { _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1ERKSt8_Locinfom_nid_postfix(nullptr, &info, 0); }), "char time_put C1 null self throws");
     Require(Throws([&] { _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1ERKSt8_Locinfom_nid_postfix(&putFromLocinfo.base, nullptr, 0); }), "char time_put C1 null locinfo throws");
+    Require(Throws([&] { _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2ERKSt8_Locinfom_nid_postfix(nullptr, &info, 0); }), "char time_put C2 locinfo null self throws");
+    Require(Throws([&] { _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2ERKSt8_Locinfom_nid_postfix(&putFromLocinfoBase.base, nullptr, 0); }), "char time_put C2 locinfo null locinfo throws");
     Require(Throws([] { _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2Em_nid_postfix(nullptr, 0); }), "char time_put C2 null self throws");
     Require(Throws([] { _ZNSt8time_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEEC1Em_nid_postfix(nullptr, 0); }), "wide time_put C1 null self throws");
     Require(Throws([&] { _ZNSt8time_putIwSt19ostreambuf_iteratorIwSt11char_traitsIwEEE5_InitERKSt8_Locinfo_nid_postfix(&putWideGuarded.base, &info); }), "wide time_put _Init still throws");

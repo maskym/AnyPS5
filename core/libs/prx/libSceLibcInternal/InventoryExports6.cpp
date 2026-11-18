@@ -399,12 +399,6 @@ int APS5_VABI sceLibcInternalUnknown6_109_zpy7LnTL5p0_nid_no_patch() {
 }
 APS5_EXPORT("zpy7LnTL5p0", sceLibcInternalUnknown6_109_zpy7LnTL5p0_nid_no_patch);
 
-int APS5_VABI sceLibcInternalUnknown6_110_IuFImJ5pkTk_nid_no_patch() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-APS5_EXPORT("IuFImJ5+kTk", sceLibcInternalUnknown6_110_IuFImJ5pkTk_nid_no_patch);
-
 void APS5_VABI sceLibcInternalUnknown6_112_6yplvTHbxpE_nid_no_patch(void* self) {
     _ZdlPv_nid_postfix(self);
 }

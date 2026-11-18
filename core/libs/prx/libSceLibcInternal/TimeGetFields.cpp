@@ -853,6 +853,11 @@ void APS5_VABI _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC1ER
     InitTimePutCharFacet(self, refs);
 }
 
+void APS5_VABI _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2ERKSt8_Locinfom_nid_postfix(GuestLocale::Facet* self, const GuestLocale::LocinfoStorage* info, std::size_t refs) {
+    RequireArgument(self != nullptr && info != nullptr, __func__);
+    InitTimePutCharFacet(self, refs);
+}
+
 void APS5_VABI _ZNSt8time_putIcSt19ostreambuf_iteratorIcSt11char_traitsIcEEEC2Em_nid_postfix(GuestLocale::Facet* self, std::size_t refs) {
     RequireArgument(self != nullptr, __func__);
     ScopedClassicLocinfo locinfo("C");

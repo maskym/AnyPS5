@@ -916,4 +916,14 @@ GuestLocale::InputIterator APS5_VABI _ZNKSt8time_getIwSt19istreambuf_iteratorIwS
     return DoGetFmtImpl<std::uint16_t>(self, first, last, stream, state, time, fmtfirst, __func__);
 }
 
+bool APS5_VABI _ZNKSt19istreambuf_iteratorIcSt11char_traitsIcEE5equalERKS2__nid_postfix(GuestLocale::InputIterator* self, GuestLocale::InputIterator* right) {
+    RequireArgument(self != nullptr && right != nullptr, __func__);
+    return Equal<char>(*self, *right);
+}
+
+bool APS5_VABI _ZNKSt19istreambuf_iteratorIwSt11char_traitsIwEE5equalERKS2__nid_postfix(GuestLocale::InputIterator* self, GuestLocale::InputIterator* right) {
+    RequireArgument(self != nullptr && right != nullptr, __func__);
+    return Equal<std::uint16_t>(*self, *right);
+}
+
 }

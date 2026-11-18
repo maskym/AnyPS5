@@ -1051,6 +1051,69 @@ void CheckGroup5RemainingTimeGet(bool hasLibrary) {
     Require(NotImplementedCalls_nid_no_patch() > before, "Group 5 error paths reported");
 }
 
+template<typename TChar>
+std::uint64_t CachedIteratorWord(TChar value) {
+    if constexpr (sizeof(TChar) == 1) {
+        return 1ull | (static_cast<std::uint64_t>(static_cast<unsigned char>(value)) << 8);
+    } else {
+        return 1ull | (static_cast<std::uint64_t>(static_cast<std::uint16_t>(value)) << 16);
+    }
+}
+
+template<typename TChar, typename TEqual>
+void CheckIteratorEqualTyped(TEqual equal) {
+    for (const bool buffered : {true, false}) {
+        InputStreambuf<TChar> sb{};
+        {
+            auto first = EndIter();
+            auto last = EndIter();
+            Require(equal(&first, &last), "end equals end");
+            Require(first.words[0] == 0 && first.words[1] == 1, "end iterator unchanged");
+            Require(last.words[0] == 0 && last.words[1] == 1, "end iterator unchanged on right");
+        }
+        {
+            sb.Setup(Ascii<TChar>("ab"), buffered);
+            auto first = sb.Begin();
+            auto last = EndIter();
+            Require(!equal(&first, &last), "non-empty stream differs from end");
+            Require(first.words[0] == reinterpret_cast<std::uint64_t>(&sb.buffer), "peek keeps the buffer");
+            Require(first.words[1] == CachedIteratorWord<TChar>(static_cast<TChar>('a')), "peek caches the first element");
+            Require(sb.uflows == 0, "equal does not consume");
+            Require(sb.underflows == (buffered ? 0 : 1), "unbuffered peek underflows once");
+            const int underflows = sb.underflows;
+            Require(!equal(&first, &last), "got iterator still differs from end");
+            Require(sb.underflows == underflows && sb.uflows == 0, "got iterator is not peeked again");
+            auto second = sb.Begin();
+            Require(equal(&first, &second), "two live iterators on one buffer are equal");
+            Require(equal(&second, &first), "two live iterators are equal in either order");
+        }
+        {
+            sb.Setup(Ascii<TChar>(""), buffered);
+            auto first = sb.Begin();
+            auto last = EndIter();
+            Require(equal(&first, &last), "empty stream equals end");
+            Require(first.words[0] == 0 && first.words[1] == 1, "empty stream iterator becomes end");
+            Require(sb.underflows == 1 && sb.uflows == 0, "empty stream underflows once");
+            Require(equal(&last, &first), "end equals exhausted iterator");
+        }
+        {
+            sb.Setup(Ascii<TChar>(""), buffered);
+            GuestLocale::InputIterator got{{reinterpret_cast<std::uint64_t>(&sb.buffer), CachedIteratorWord<TChar>(static_cast<TChar>('x'))}};
+            auto last = EndIter();
+            Require(!equal(&got, &last), "got iterator with a buffer differs from end");
+            Require(sb.underflows == 0 && sb.uflows == 0, "got iterator is never peeked");
+            Require(got.words[0] == reinterpret_cast<std::uint64_t>(&sb.buffer), "got iterator keeps its buffer");
+        }
+    }
+}
+
+void CheckIteratorEqual() {
+    const std::uint64_t before = NotImplementedCalls_nid_no_patch();
+    CheckIteratorEqualTyped<char>(&_ZNKSt19istreambuf_iteratorIcSt11char_traitsIcEE5equalERKS2__nid_postfix);
+    CheckIteratorEqualTyped<char16_t>(&_ZNKSt19istreambuf_iteratorIwSt11char_traitsIwEE5equalERKS2__nid_postfix);
+    Require(NotImplementedCalls_nid_no_patch() == before, "iterator equal reports nothing");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -1082,5 +1145,6 @@ int main(int argc, char** argv) {
     CheckGroup3Fields();
     CheckGroup4GetAndGetFmt();
     CheckGroup5RemainingTimeGet(hasLibrary);
+    CheckIteratorEqual();
     return 0;
 }

@@ -148,6 +148,7 @@ void KqueueSignalSent(int guest);
 extern "C" bool IsKqueueDescriptor_nid_no_patch(int descriptor);
 int ReserveKqueueDescriptor();
 void RegisterKqueueDescriptor(int descriptor, KernelEqueueRef queue);
+void DuplicateKqueueDescriptor(int from, int to);
 KernelEqueueRef FindKqueueDescriptor(int descriptor);
 extern "C" void RegisterDescriptorCloseObserver_nid_no_patch(void (*observer)(int descriptor));
 std::optional<bool> KqueueReadable(int descriptor);

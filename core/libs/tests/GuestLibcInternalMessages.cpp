@@ -305,6 +305,16 @@ void CheckNarrowConstructors() {
     storage = Filled();
     _ZNSt8messagesIcEC2ERKSt8_Locinfom_nid_postfix(storage.bytes, &locinfo, 2);
     Require(Constructed(storage, vtable, 2), "the base _Locinfo constructor builds the facet");
+    storage = Filled();
+    _ZNSt8messagesIcEC1Em_nid_postfix(storage.bytes, references);
+    Require(Constructed(storage, vtable, references), "the complete messages<char>(refs) installs the exported vtable and the 64-bit reference count only");
+    storage = Filled();
+    _ZNSt8messagesIcEC2EPKcm_nid_postfix(storage.bytes, "C", 6);
+    Require(Constructed(storage, vtable, 6), "the base messages<char>(name, refs) builds the facet for the C locale");
+    Require(Throws([&] { _ZNSt8messagesIcEC2EPKcm_nid_postfix(storage.bytes, "fr_FR", 0); }), "the base messages<char>(name, refs) refuses a name _Locinfo refuses");
+    Require(Throws([&] { _ZNSt8messagesIcEC2EPKcm_nid_postfix(storage.bytes, nullptr, 0); }), "the base messages<char>(name, refs) refuses a null name");
+    Require(Throws([&] { _ZNSt8messagesIcEC1Em_nid_postfix(nullptr, 0); }), "the complete messages<char>(refs) refuses a null object");
+    Require(Constructed(storage, vtable, 6), "a refused constructor leaves the facet unchanged");
     _ZNSt8_LocinfoD1Ev_nid_postfix(&locinfo);
     const auto* facet = reinterpret_cast<const Facet*>(storage.bytes);
     const String name{};
@@ -328,6 +338,19 @@ void CheckWideConstructors() {
     storage = Filled();
     _ZNSt8messagesIwEC1ERKSt8_Locinfom_nid_postfix(storage.bytes, &locinfo, 5);
     Require(Constructed(storage, vtable, 5), "the _Locinfo constructor builds the facet");
+    storage = Filled();
+    _ZNSt8messagesIwEC1Em_nid_postfix(storage.bytes, 0x100000007ull);
+    Require(Constructed(storage, vtable, 0x100000007ull), "the complete messages<wchar_t>(refs) installs the vtable and the 64-bit reference count only");
+    storage = Filled();
+    _ZNSt8messagesIwEC2EPKcm_nid_postfix(storage.bytes, "C", 8);
+    Require(Constructed(storage, vtable, 8), "the base messages<wchar_t>(name, refs) builds the facet for the C locale");
+    storage = Filled();
+    _ZNSt8messagesIwEC2ERKSt8_Locinfom_nid_postfix(storage.bytes, &locinfo, 9);
+    Require(Constructed(storage, vtable, 9), "the base _Locinfo constructor builds the wide facet");
+    Require(Throws([&] { _ZNSt8messagesIwEC2ERKSt8_Locinfom_nid_postfix(storage.bytes, nullptr, 0); }), "the base _Locinfo constructor refuses a null _Locinfo");
+    Require(Throws([&] { _ZNSt8messagesIwEC2EPKcm_nid_postfix(storage.bytes, "fr_FR", 0); }), "the base messages<wchar_t>(name, refs) refuses a name _Locinfo refuses");
+    Require(Throws([&] { _ZNSt8messagesIwEC1Em_nid_postfix(nullptr, 0); }), "the complete messages<wchar_t>(refs) refuses a null object");
+    Require(Constructed(storage, vtable, 9), "a refused constructor leaves the wide facet unchanged");
     _ZNSt8_LocinfoD1Ev_nid_postfix(&locinfo);
 
     const auto* facet = reinterpret_cast<const Facet*>(storage.bytes);

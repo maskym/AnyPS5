@@ -74,8 +74,16 @@ void APS5_VABI _ZNSt8messagesIcEC1EPKcm_nid_postfix(void* self, const char* loca
     ConstructNamed(self, localeName, NarrowVtable(), references, "messages<char>::messages");
 }
 
+void APS5_VABI _ZNSt8messagesIcEC1Em_nid_postfix(void* self, std::size_t references) {
+    Construct(self, NarrowVtable(), references, "messages<char>::messages");
+}
+
 void APS5_VABI _ZNSt8messagesIcEC1ERKSt8_Locinfom_nid_postfix(void* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references) {
     ConstructFrom(self, locinfo, NarrowVtable(), references, "messages<char>::messages");
+}
+
+void APS5_VABI _ZNSt8messagesIcEC2EPKcm_nid_postfix(void* self, const char* localeName, std::size_t references) {
+    ConstructNamed(self, localeName, NarrowVtable(), references, "messages<char>::messages");
 }
 
 void APS5_VABI _ZNSt8messagesIcEC2ERKSt8_Locinfom_nid_postfix(void* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references) {
@@ -90,7 +98,19 @@ void APS5_VABI _ZNSt8messagesIwEC1EPKcm_nid_postfix(void* self, const char* loca
     ConstructNamed(self, localeName, &g_wideMessagesVtable.facet, references, "messages<wchar_t>::messages");
 }
 
+void APS5_VABI _ZNSt8messagesIwEC1Em_nid_postfix(void* self, std::size_t references) {
+    Construct(self, &g_wideMessagesVtable.facet, references, "messages<wchar_t>::messages");
+}
+
 void APS5_VABI _ZNSt8messagesIwEC1ERKSt8_Locinfom_nid_postfix(void* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references) {
+    ConstructFrom(self, locinfo, &g_wideMessagesVtable.facet, references, "messages<wchar_t>::messages");
+}
+
+void APS5_VABI _ZNSt8messagesIwEC2EPKcm_nid_postfix(void* self, const char* localeName, std::size_t references) {
+    ConstructNamed(self, localeName, &g_wideMessagesVtable.facet, references, "messages<wchar_t>::messages");
+}
+
+void APS5_VABI _ZNSt8messagesIwEC2ERKSt8_Locinfom_nid_postfix(void* self, const GuestLocale::LocinfoStorage* locinfo, std::size_t references) {
     ConstructFrom(self, locinfo, &g_wideMessagesVtable.facet, references, "messages<wchar_t>::messages");
 }
 

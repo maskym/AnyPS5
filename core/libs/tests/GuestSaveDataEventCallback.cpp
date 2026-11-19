@@ -19,6 +19,16 @@
 #include <system_error>
 #include <thread>
 #include <vector>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <tlhelp32.h>
+#endif
 
 namespace {
 
@@ -136,7 +146,23 @@ private:
     std::thread thread;
 };
 
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
+#ifdef _WIN32
+std::set<std::string> Tasks() {
+    std::set<std::string> tasks;
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    Check(snapshot != INVALID_HANDLE_VALUE, "snapshots the process threads");
+    THREADENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+    const DWORD process = GetCurrentProcessId();
+    for (BOOL more = Thread32First(snapshot, &entry); more; more = Thread32Next(snapshot, &entry))
+        if (entry.th32OwnerProcessID == process) tasks.insert(std::to_string(entry.th32ThreadID));
+    CloseHandle(snapshot);
+    return tasks;
+}
+
+std::size_t TaskCount() { return Tasks().size(); }
+#else
 std::size_t TaskCount() {
     return static_cast<std::size_t>(std::distance(std::filesystem::directory_iterator("/proc/self/task"), std::filesystem::directory_iterator{}));
 }
@@ -146,6 +172,7 @@ std::set<std::string> Tasks() {
     for (const auto& entry : std::filesystem::directory_iterator("/proc/self/task")) tasks.insert(entry.path().filename().string());
     return tasks;
 }
+#endif
 
 bool WaitForTaskCount(std::size_t count) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
@@ -210,20 +237,20 @@ void CheckDelivered(std::size_t index, int callback, void* userdata, std::uint32
 }
 
 void CheckSessionsWithoutRegistration() {
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
     const auto before = TaskCount();
 #endif
     for (int session = 0; session < 2; ++session) {
         const auto label = "session " + std::to_string(session) + " without a registration";
         Check(sceSaveDataInitialize3(nullptr) == 0, label + ": SaveData initializes");
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
         Check(TaskCount() == before, label + ": Initialize3 starts no thread, " + std::to_string(before) + " threads before and " + std::to_string(TaskCount()) + " after");
 #endif
         Check(sceSaveDataTerminate() == 0, label + ": SaveData terminates");
     }
 }
 
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
 void CheckDeliveryThreadStartsAtRegistration() {
     const auto before = TaskCount();
     const auto counted = [&](const std::string& what) { return what + ", " + std::to_string(before) + " threads before and " + std::to_string(TaskCount()) + " now"; };
@@ -456,7 +483,7 @@ int main() {
     int firstTag = 0;
     int secondTag = 0;
     CheckSessionsWithoutRegistration();
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
     CheckDeliveryThreadStartsAtRegistration();
 #endif
     CheckRegistration();

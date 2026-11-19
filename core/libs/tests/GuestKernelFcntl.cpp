@@ -484,8 +484,20 @@ static void RecordLocksBelongToTheProcess() {
     Require(fcntl_nid_postfix(directory, SetLock, &read) == 0);
     RequireFailure(fcntl_nid_postfix(directory, SetLock, &write), GuestEbadf);
     Require(NoConflict(directory, {0, 0, 0, WriteLock, FromCurrent, 0}));
+    FileStat directoryStatus{};
+    Require(fstat_nid_disambig1_nid_postfix(directory, &directoryStatus) == 0);
+    const std::int64_t directorySize = directoryStatus.st_size;
     GuestLock directoryEnd{0, 0, 0, ReadLock, FromEnd, 0};
-    Require(ThrowsWith([directory, &directoryEnd] { fcntl_nid_postfix(directory, SetLock, &directoryEnd); }, "fcntl: a record lock from the end on a directory is not implemented"));
+    Require(fcntl_nid_postfix(directory, SetLock, &directoryEnd) == 0);
+    GuestLock directoryStart{-directorySize, 0, 0, ReadLock, FromEnd, 0};
+    Require(fcntl_nid_postfix(directory, SetLock, &directoryStart) == 0);
+    GuestLock directoryBefore{-directorySize - 1, 0, 0, ReadLock, FromEnd, 0};
+    RequireFailure(fcntl_nid_postfix(directory, SetLock, &directoryBefore), GuestEinval);
+    GuestLock directoryQuery{0, 0, 0, WriteLock, FromEnd, 0};
+    Require(fcntl_nid_postfix(directory, GetLock, &directoryQuery) == 0 && directoryQuery.type == Unlock);
+    GuestLock directoryPastEnd{std::numeric_limits<std::int64_t>::max(), 0, 0, ReadLock, FromEnd, 0};
+    if (directorySize > 0) RequireFailure(fcntl_nid_postfix(directory, SetLock, &directoryPastEnd), GuestEoverflow);
+    else Require(fcntl_nid_postfix(directory, SetLock, &directoryPastEnd) == 0);
     Require(close_nid_postfix(directory) == 0);
     std::filesystem::remove("kernel_fcntl_locks_dir");
 #endif

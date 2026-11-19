@@ -1947,15 +1947,21 @@ static void CheckUnhintedKernelMappingsLandInTheWindow() {
     Require(sceKernelReleaseDirectMemory(phys, page) == 0);
 }
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
 static void CheckUnmappedArenaRangeStaysReserved() {
     constexpr std::size_t page = 0x4000;
     void* address = nullptr;
     Require(sceKernelMapNamedFlexibleMemory(&address, page, 3, 0, "reserved-after-unmap") == 0);
     Require(address != nullptr);
     Require(sceKernelMunmap(reinterpret_cast<std::uint64_t>(address), page) == 0);
+#ifdef _WIN32
+    SetLastError(0);
+    void* hostile = VirtualAlloc(address, page, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    Require(hostile == nullptr && GetLastError() == ERROR_INVALID_ADDRESS);
+#elif defined(__linux__)
     void* hostile = mmap(address, page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
     Require(hostile == MAP_FAILED && errno == EEXIST);
+#endif
     void* again = nullptr;
     Require(sceKernelMapNamedFlexibleMemory(&again, page, 3, 0, "reserved-after-unmap-2") == 0);
     Require(again != nullptr);
@@ -4754,7 +4760,7 @@ int main(int argc, char** argv) {
     CheckAliasLeavesResidentRunsUnderAHostWrite();
 #endif
     CheckUnhintedKernelMappingsLandInTheWindow();
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
     CheckUnmappedArenaRangeStaysReserved();
 #endif
     CheckArenaPlacesUnhintedMappingsInsideTheWindow();

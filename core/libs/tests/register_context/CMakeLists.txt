@@ -11,6 +11,10 @@ add_executable(register_context_tests ../RegisterContext.cpp)
 target_include_directories(register_context_tests PRIVATE ../..)
 target_compile_features(register_context_tests PRIVATE cxx_std_20)
 target_link_libraries(register_context_tests PRIVATE Threads::Threads)
+if(MINGW)
+    target_compile_options(register_context_tests PRIVATE -fasynchronous-unwind-tables)
+    target_link_options(register_context_tests PRIVATE -static -static-libgcc -static-libstdc++)
+endif()
 set_target_properties(register_context_tests PROPERTIES
     CXX_EXTENSIONS OFF
     RUNTIME_OUTPUT_DIRECTORY "$<1:${ANYPS5_TEST_OUTPUT_DIRECTORY}>")

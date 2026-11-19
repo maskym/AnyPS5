@@ -148,8 +148,8 @@ void applyMode(int mode, int value) {
 int openPort(std::uint32_t len, std::uint32_t freq, std::uint32_t param) {
     Format format{};
     if (!formatOf(param, format)) return AUDIO_IN_ERROR_INVALID_PARAM;
-    const char* const configuredName = std::getenv("ANYPS5_AUDIO_IN_DEVICE");
-    const std::string_view requestedName = configuredName ? std::string_view(configuredName) : std::string_view{};
+    const std::string configuredName = audioin::detail::configuredCaptureDevice();
+    const std::string_view requestedName = configuredName;
     const bool explicitDevice = !requestedName.empty() && requestedName != "default";
     std::lock_guard lock(g_mutex);
     for (std::size_t i = g_ports.size(); i-- > 0;) {

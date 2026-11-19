@@ -44,6 +44,19 @@ void TestCaptureDeviceSelection() {
     Require(audioin::detail::selectCaptureDevice("Microphone A", -1, getName).kind == CaptureDeviceMatchKind::Missing);
 }
 
+void TestConfiguredDeviceIsUtf8() {
+#ifdef _WIN32
+    Require(_wputenv_s(L"ANYPS5_AUDIO_IN_DEVICE", L"Micro \u00C9 \u041C\u0438\u043A") == 0);
+    Require(audioin::detail::configuredCaptureDevice() == "Micro \xC3\x89 \xD0\x9C\xD0\xB8\xD0\xBA");
+    Require(_wputenv_s(L"ANYPS5_AUDIO_IN_DEVICE", L"") == 0);
+#else
+    Require(unsetenv("ANYPS5_AUDIO_IN_DEVICE") == 0);
+    Require(audioin::detail::configuredCaptureDevice().empty());
+    Require(setenv("ANYPS5_AUDIO_IN_DEVICE", "", 1) == 0);
+#endif
+    Require(audioin::detail::configuredCaptureDevice().empty());
+}
+
 void TestConfiguredDeviceUnavailable() {
     constexpr int invalidDevice = static_cast<int>(0x8026010f);
     SetEnvironment("SDL_AUDIODRIVER", "none");
@@ -253,6 +266,7 @@ void TestNoDevice() {
     SetEnvironment("SDL_AUDIODRIVER", "none");
     TestConfiguredDeviceUnavailable();
     TestCaptureDeviceSelection();
+    TestConfiguredDeviceIsUtf8();
     TestValidation();
     TestOpenEx();
     TestFirmwareSignatures();
@@ -310,6 +324,7 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[1], "selection") == 0) {
         TestConfiguredDeviceUnavailable();
         TestCaptureDeviceSelection();
+        TestConfiguredDeviceIsUtf8();
     }
     else TestNoDevice();
 }

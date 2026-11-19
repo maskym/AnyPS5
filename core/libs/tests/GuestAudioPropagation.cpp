@@ -21,11 +21,25 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <psapi.h>
 #else
 #include <dlfcn.h>
 #endif
 
 namespace {
+
+long PeakKilobytes() {
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS counters{};
+    counters.cb = sizeof(counters);
+    if (K32GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters)) == 0) std::abort();
+    return static_cast<long>(counters.PeakWorkingSetSize / 1024);
+#else
+    rusage usage{};
+    getrusage(RUSAGE_SELF, &usage);
+    return usage.ru_maxrss;
+#endif
+}
 
 void Require(bool condition, const char* message) {
     if (!condition) {
@@ -293,16 +307,9 @@ int main() {
     errno = 71;
     RequireThrows<std::invalid_argument>([&] { sceAudioPropagationSystemSetAttributes(system, unreadable, 1); }, "system attributes from an unreadable array");
     Require(errno == 71, "unreadable system attributes changed errno");
-#ifndef _WIN32
-    rusage before{};
-    getrusage(RUSAGE_SELF, &before);
-#endif
+    const long peakBefore = PeakKilobytes();
     RequireThrows<std::invalid_argument>([&] { sceAudioPropagationSystemSetAttributes(system, unreadable, 0x10000000u); }, "a huge count from an unreadable array");
-#ifndef _WIN32
-    rusage after{};
-    getrusage(RUSAGE_SELF, &after);
-    Require(after.ru_maxrss - before.ru_maxrss < 64 * 1024, "a huge attribute count sized a buffer before reading");
-#endif
+    Require(PeakKilobytes() - peakBefore < 64 * 1024, "a huge attribute count sized a buffer before reading");
 
     std::uint8_t materialBytes[AudioPropagation::MaterialSize]{};
     auto* material = reinterpret_cast<AudioPropagationStructDescriptor*>(materialBytes);

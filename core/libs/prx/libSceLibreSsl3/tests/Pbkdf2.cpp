@@ -13,6 +13,12 @@
 #include <vector>
 #ifdef __linux__
 #include <sys/resource.h>
+#elif defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <psapi.h>
 #endif
 
 namespace {
@@ -28,6 +34,11 @@ long PeakKilobytes() {
     rusage usage{};
     getrusage(RUSAGE_SELF, &usage);
     return usage.ru_maxrss;
+#elif defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS counters{};
+    counters.cb = sizeof(counters);
+    if (K32GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters)) == 0) std::abort();
+    return static_cast<long>(counters.PeakWorkingSetSize / 1024);
 #else
     return 0;
 #endif

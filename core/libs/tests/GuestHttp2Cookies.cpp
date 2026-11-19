@@ -9,6 +9,7 @@
 #include <string>
 #ifdef _WIN32
 #include <windows.h>
+#include <psapi.h>
 #else
 #include <sys/mman.h>
 #include <sys/resource.h>
@@ -16,6 +17,19 @@
 #endif
 
 static void Require(bool value) { if (!value) std::abort(); }
+
+static long PeakKilobytes() {
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS counters{};
+    counters.cb = sizeof(counters);
+    if (K32GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters)) == 0) std::abort();
+    return static_cast<long>(counters.PeakWorkingSetSize / 1024);
+#else
+    rusage usage{};
+    getrusage(RUSAGE_SELF, &usage);
+    return usage.ru_maxrss;
+#endif
+}
 
 static constexpr int NotFound = static_cast<int>(0x817B1025);
 static constexpr int InvalidId = static_cast<int>(0x817B1100);
@@ -112,16 +126,9 @@ static void CheckUnmappedOutputs(int box) {
     Require(sceHttp2GetCookie(box, badText, header, &required, sizeof(header)) == InvalidValue);
     Require(sceHttp2AddCookie(box, badText, "a=b", 3) == InvalidValue);
     Require(sceHttp2AddCookie(box, url, badText, 3) == InvalidValue);
-#ifndef _WIN32
-    rusage before{};
-    getrusage(RUSAGE_SELF, &before);
-#endif
+    const long peakBefore = PeakKilobytes();
     Require(sceHttp2AddCookie(box, url, badText, std::size_t{1} << 40) == InvalidValue);
-#ifndef _WIN32
-    rusage after{};
-    getrusage(RUSAGE_SELF, &after);
-    Require(after.ru_maxrss - before.ru_maxrss < 64 * 1024);
-#endif
+    Require(PeakKilobytes() - peakBefore < 64 * 1024);
     Require(errno == 71);
     GuestArena::GuestArenaSetHostReadHook_nid_no_patch(nullptr);
     GuestArena::GuestArenaSetHostWriteHook_nid_no_patch(nullptr);

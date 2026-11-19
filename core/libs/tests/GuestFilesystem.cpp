@@ -1789,7 +1789,6 @@ int main() {
     Require(flock_nid_postfix(locked, 8) == 0);
     Require(flock_nid_postfix(other, 2 | 4) == 0);
     Require(flock_nid_postfix(other, 8) == 0);
-#ifndef _WIN32
     {
         const int third = open_nid_postfix(presentName.c_str(), 0, 0);
         Require(third >= 0);
@@ -1804,7 +1803,6 @@ int main() {
         Require(flock_nid_postfix(locked, 8) == 0);
         Require(close_nid_postfix(third) == 0);
     }
-#endif
     Require(flock_nid_postfix(locked, 2 | 4) == 0);
     Require(lseek_nid_postfix(-1, 0, 7) == -1 && *__error_nid_postfix() == 9);
     Require(lseek_nid_postfix(0x7fffffff, 0, -1) == -1 && *__error_nid_postfix() == 9);

@@ -10,6 +10,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -103,9 +104,11 @@ void CheckInvalidValueStopsMount() {
     SetFreeSpaceVariable(nullptr);
 }
 
-#ifndef _WIN32
 void CheckEmptyValueStopsMount() {
+#ifndef _WIN32
     SetFreeSpaceVariable("");
+#endif
+    Check(std::getenv("ANYPS5_FREE_SPACE") != nullptr && *std::getenv("ANYPS5_FREE_SPACE") == '\0', "ANYPS5_FREE_SPACE is set and empty");
     SaveDataMountResult result{};
     std::string message;
     try {
@@ -116,6 +119,25 @@ void CheckEmptyValueStopsMount() {
     Check(message.find("ANYPS5_FREE_SPACE") != std::string::npos, "an empty ANYPS5_FREE_SPACE throws an error naming the variable");
     Check(!std::filesystem::exists("_sd/HS_EMPTY"), "an empty ANYPS5_FREE_SPACE stops the mount before a save is created");
     SetFreeSpaceVariable(nullptr);
+}
+
+#ifdef _WIN32
+void CheckEmptyValueInChild(const wchar_t* executable) {
+    Check(SetEnvironmentVariableW(L"ANYPS5_FREE_SPACE", L"") != 0, "an empty ANYPS5_FREE_SPACE is set for the child");
+    std::wstring command = L"\"" + std::wstring(executable) + L"\" --empty-free-space";
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    const bool created = CreateProcessW(executable, command.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup, &process) != 0;
+    SetEnvironmentVariableW(L"ANYPS5_FREE_SPACE", nullptr);
+    Check(created, "the empty ANYPS5_FREE_SPACE child starts");
+    if (!created) return;
+    DWORD code = 1;
+    WaitForSingleObject(process.hProcess, INFINITE);
+    GetExitCodeProcess(process.hProcess, &code);
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    Check(code == 0, "an empty ANYPS5_FREE_SPACE stops the mount in the child");
 }
 #endif
 
@@ -268,7 +290,24 @@ void CheckDefaultVolumeQuery() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+#ifdef _WIN32
+    if (argc == 2 && std::strcmp(argv[1], "--empty-free-space") == 0) {
+        sceSaveDataInitialize3(nullptr);
+        CheckEmptyValueStopsMount();
+        sceSaveDataTerminate();
+        return failures == 0 ? 0 : 1;
+    }
+    wchar_t executable[MAX_PATH * 4];
+    const DWORD length = GetModuleFileNameW(nullptr, executable, static_cast<DWORD>(std::size(executable)));
+    if (length == 0 || length == std::size(executable)) {
+        std::fprintf(stderr, "cannot read the test executable path\n");
+        return 1;
+    }
+#else
+    (void)argc;
+    (void)argv;
+#endif
     const auto previous = std::filesystem::current_path();
     std::mt19937_64 random(std::random_device{}());
     const auto root = std::filesystem::temp_directory_path() / ("anyps5-savedata-host-space-" + std::to_string(random()));
@@ -281,7 +320,9 @@ int main() {
     CheckHostRoom();
     CheckHostFreeBlocks();
     CheckDefaultVolumeQuery();
-#ifndef _WIN32
+#ifdef _WIN32
+    CheckEmptyValueInChild(executable);
+#else
     CheckEmptyValueStopsMount();
 #endif
 

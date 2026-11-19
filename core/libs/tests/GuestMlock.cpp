@@ -11,6 +11,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <psapi.h>
+#include <vector>
 #endif
 #if defined(__linux__)
 #include <fstream>
@@ -40,6 +42,23 @@ static std::size_t LockedKilobytes() {
 }
 #endif
 
+#ifdef _WIN32
+#define HAS_LOCKED_KILOBYTES
+static void* lockedRegion = nullptr;
+static std::size_t lockedRegionLength = 0;
+static std::size_t LockedKilobytes() {
+    constexpr std::size_t hostPage = 0x1000;
+    std::vector<PSAPI_WORKING_SET_EX_INFORMATION> pages(lockedRegionLength / hostPage);
+    for (std::size_t index = 0; index < pages.size(); ++index)
+        pages[index].VirtualAddress = static_cast<unsigned char*>(lockedRegion) + index * hostPage;
+    Require(QueryWorkingSetEx(GetCurrentProcess(), pages.data(), static_cast<DWORD>(pages.size() * sizeof(pages[0]))) != 0);
+    std::size_t locked = 0;
+    for (const auto& entry : pages)
+        if (entry.VirtualAttributes.Valid && entry.VirtualAttributes.Locked) locked += hostPage / 1024;
+    return locked;
+}
+#endif
+
 #ifdef __APPLE__
 static unsigned WiredCount(const void* page) {
     mach_vm_address_t address = reinterpret_cast<mach_vm_address_t>(page);
@@ -64,6 +83,10 @@ int main() {
     void* mapped = nullptr;
     Require(sceKernelMapFlexibleMemory(&mapped, length, 3, 0) == 0);
     auto* bytes = static_cast<unsigned char*>(mapped);
+#ifdef _WIN32
+    lockedRegion = mapped;
+    lockedRegionLength = length;
+#endif
 
     *__error_nid_postfix() = untouched;
     Require(sceKernelMlock_nid_postfix(mapped, 0) == 0);
@@ -93,8 +116,6 @@ int main() {
     Require(sceKernelMunlock_nid_postfix(bytes + 1, length - page) == 0);
 #ifdef HAS_LOCKED_KILOBYTES
     Require(LockedKilobytes() == lockedBefore);
-#elif defined(_WIN32)
-    Require(!VirtualUnlock(mapped, length) && GetLastError() == ERROR_NOT_LOCKED);
 #endif
     *__error_nid_postfix() = untouched;
     Require(sceKernelMunlock_nid_postfix(mapped, length) == 0);
@@ -110,15 +131,11 @@ int main() {
     Require(sceKernelMunlock_nid_postfix(mapped, length) == 0);
 #ifdef HAS_LOCKED_KILOBYTES
     Require(LockedKilobytes() == lockedBefore);
-#elif defined(_WIN32)
-    Require(!VirtualUnlock(mapped, page) && GetLastError() == ERROR_NOT_LOCKED);
 #endif
     Require(sceKernelMlock_nid_postfix(mapped, page) == 0);
     Require(sceKernelMunlock_nid_postfix(mapped, page) == 0);
 #ifdef HAS_LOCKED_KILOBYTES
     Require(LockedKilobytes() == lockedBefore);
-#elif defined(_WIN32)
-    Require(!VirtualUnlock(mapped, page) && GetLastError() == ERROR_NOT_LOCKED);
 #endif
     Require(sceKernelMlock_nid_postfix(mapped, page) == 0);
 #ifdef HAS_LOCKED_KILOBYTES
@@ -132,8 +149,6 @@ int main() {
     Require(LockedKilobytes() == lockedBefore);
 #elif defined(__APPLE__)
     Require(WiredCount(mapped) == 0);
-#elif defined(_WIN32)
-    Require(!VirtualUnlock(mapped, page) && GetLastError() == ERROR_NOT_LOCKED);
 #endif
 
     constexpr int sceInvalid = static_cast<int>(0x80020016u);

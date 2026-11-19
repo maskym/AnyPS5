@@ -44,6 +44,12 @@ int main() {
     Check(UsbStorage::HostFolderVolumes().empty(), "ANYPS5_STORAGE_FOLDER mounts a missing folder");
     ::unsetenv("ANYPS5_STORAGE_FOLDER");
 #else
+    _wputenv_s(L"ANYPS5_STORAGE_FOLDER", L"");
+    Check(UsbStorage::HostFolderVolumes().empty(), "a folder is mounted without ANYPS5_STORAGE_FOLDER");
+    _wputenv_s(L"ANYPS5_STORAGE_FOLDER", (base / "missing").c_str());
+    Check(UsbStorage::HostFolderVolumes().empty(), "ANYPS5_STORAGE_FOLDER mounts a missing folder");
+    _wputenv_s(L"ANYPS5_STORAGE_FOLDER", (base / "file").c_str());
+    Check(UsbStorage::HostFolderVolumes().empty(), "ANYPS5_STORAGE_FOLDER mounts a regular file");
     const auto wide = base / L"caf\u00e9\u4e2d";
     fs::create_directories(wide);
     _wputenv_s(L"ANYPS5_STORAGE_FOLDER", wide.c_str());

@@ -1,6 +1,7 @@
 import argparse
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -129,6 +130,17 @@ def convert(relinker, source, output, extra, windows):
     return subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
+def is_link(path):
+    try:
+        info = path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    return (bool(getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+            and info.st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT)
+
+
 def comparison_path(path, links=frozenset()):
     for prefix in (*reversed(path.parents), path):
         if not prefix.is_symlink():
@@ -226,14 +238,14 @@ def main(argv=None):
                     parser.error(f"{generated}: work directory contains input {input_path}")
         for generated in (source, output):
             try:
-                if generated.is_symlink():
+                if is_link(generated):
                     generated.unlink()
                 elif generated.exists():
                     shutil.rmtree(generated)
             except OSError as error:
                 print(f"FAIL: cannot empty {generated}: {error}", file=sys.stderr)
                 return 2
-            if generated.exists() or generated.is_symlink():
+            if generated.exists() or is_link(generated):
                 print(f"FAIL: cannot empty {generated}: it still exists", file=sys.stderr)
                 return 2
         try:

@@ -4,6 +4,7 @@ import math
 import os
 import re
 import shutil
+import stat
 import statistics
 import subprocess
 import sys
@@ -176,6 +177,17 @@ def format_command(command, values):
     return result
 
 
+def is_link(path):
+    try:
+        info = path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    if stat.S_ISLNK(info.st_mode):
+        return True
+    return (bool(getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+            and info.st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT)
+
+
 def reset_build_dir(worktree, build_dir):
     root = worktree.resolve()
     if not build_dir.resolve().is_relative_to(root):
@@ -183,7 +195,7 @@ def reset_build_dir(worktree, build_dir):
     relative = build_dir.relative_to(worktree).as_posix()
     if git(worktree, "ls-files", "--", relative):
         raise ValueError("recipe.build_dir contains tracked source files and cannot be cleared safely")
-    if build_dir.is_symlink():
+    if is_link(build_dir):
         build_dir.unlink()
     elif build_dir.exists():
         shutil.rmtree(build_dir)

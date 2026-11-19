@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import math
+import os
 import subprocess
 import sys
 import tempfile
@@ -513,6 +514,36 @@ class BuildSymlinkSafetyTests(unittest.TestCase):
                 performance_bisect.reset_build_dir(repo, repo / "build")
             self.assertEqual(marker.read_text(encoding="utf-8"), "outside data")
             self.assertTrue((repo / "build").is_symlink())
+
+    @unittest.skipUnless(os.name == "nt", "directory junctions exist only on Windows")
+    def test_removes_a_build_directory_junction_without_emptying_its_target(self):
+        import _winapi
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            real = repo / "real"
+            real.mkdir()
+            marker = real / "keep.txt"
+            marker.write_text("junction target", encoding="utf-8")
+            _winapi.CreateJunction(str(real), str(repo / "build"))
+            performance_bisect.reset_build_dir(repo, repo / "build")
+            self.assertFalse(os.path.lexists(repo / "build"))
+            self.assertEqual(marker.read_text(encoding="utf-8"), "junction target")
+
+    @unittest.skipUnless(os.name == "nt", "directory junctions exist only on Windows")
+    def test_removes_a_dangling_build_directory_junction(self):
+        import _winapi
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            real = repo / "real"
+            real.mkdir()
+            _winapi.CreateJunction(str(real), str(repo / "build"))
+            real.rmdir()
+            performance_bisect.reset_build_dir(repo, repo / "build")
+            self.assertFalse(os.path.lexists(repo / "build"))
 
 
 class CliEntrypointTests(unittest.TestCase):

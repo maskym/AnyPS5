@@ -319,6 +319,34 @@ class AuditDumpTests(unittest.TestCase):
         self.assertEqual(audit.call_args.args[0][:2], [str(work / "output" / "app.registry.json"), "--libs"])
         self.assertFalse((work / "source" / "sce_module" / "gone.prx").exists())
 
+    @unittest.skipUnless(os.name == "nt", "directory junctions exist only on Windows")
+    def test_junctioned_work_directories_are_unlinked_without_emptying_their_targets(self):
+        import _winapi
+        work = self.root / "work"
+        work.mkdir()
+        markers = []
+        for generated in ("source", "output"):
+            target = self.root / f"kept-{generated}"
+            target.mkdir()
+            (target / "keep.bin").write_bytes(generated.encode())
+            markers.append((target / "keep.bin", generated.encode()))
+            _winapi.CreateJunction(str(target), str(work / generated))
+        (self.root / "kept-output").rename(self.root / "gone-output")
+        markers[1] = (self.root / "gone-output" / "keep.bin", b"output")
+
+        def relink(command, **options):
+            (Path(command[-1]).parent / "app.registry.json").write_text("[]")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with mock.patch.object(subprocess, "run", side_effect=relink), mock.patch.object(audit_dump.import_audit, "main", return_value=0) as audit:
+            code, errors = self.run_main(self.dump, "--relinker", self.relinker, "--libs", "libs", "--work", work)
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(audit.call_args.args[0][:2], [str(work / "output" / "app.registry.json"), "--libs"])
+        for generated in ("source", "output"):
+            self.assertFalse(audit_dump.is_link(work / generated))
+        for marker, contents in markers:
+            self.assertEqual(marker.read_bytes(), contents)
+
     def test_an_undeletable_stale_registry_stops_before_conversion(self):
         work = self.root / "work"
         stale = work / "output" / "locked" / "stale.registry.json"

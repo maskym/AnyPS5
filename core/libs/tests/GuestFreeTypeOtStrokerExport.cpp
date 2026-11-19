@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <stdexcept>
 #include <vector>
 
 using namespace FreeType;
@@ -18,8 +17,6 @@ void Require(bool condition, const char* message) {
     std::fprintf(stderr, "FreeTypeOt stroker export: %s\n", message);
     std::exit(1);
 }
-
-constexpr bool SharedPoints = sizeof(FT_Pos) == sizeof(std::int64_t);
 
 struct Target {
     std::vector<GuestVector> points;
@@ -61,26 +58,16 @@ int main() {
             directPoints == points && directContours == contours, "count reference stroke");
     Target actual(points, contours);
     Target expected(points, contours);
-    if constexpr (SharedPoints) {
-        FT_Stroker_ExportForward_nid_no_patch(forwarded, &actual.outline);
-        FT_Stroker_Export_nid_postfix(direct, &expected.outline);
-        Require(actual.outline.n_points == points && actual.outline.n_contours == contours, "export counts");
-        Require(actual.outline.n_points == expected.outline.n_points &&
-                actual.outline.n_contours == expected.outline.n_contours, "counts match libSceFreeType");
-        for (std::uint32_t i = 0; i < points; ++i)
-            Require(actual.points[i].x == expected.points[i].x && actual.points[i].y == expected.points[i].y &&
-                    actual.tags[i] == expected.tags[i], "points match libSceFreeType");
-        for (std::uint32_t i = 0; i < contours; ++i)
-            Require(actual.contours[i] == expected.contours[i], "contours match libSceFreeType");
-    } else {
-        bool threw = false;
-        try {
-            FT_Stroker_ExportForward_nid_no_patch(forwarded, &actual.outline);
-        } catch (const std::runtime_error&) {
-            threw = true;
-        }
-        Require(threw && actual.outline.n_points == 0 && actual.outline.n_contours == 0, "32-bit FT_Pos export throws");
-    }
+    FT_Stroker_ExportForward_nid_no_patch(forwarded, &actual.outline);
+    FT_Stroker_Export_nid_postfix(direct, &expected.outline);
+    Require(actual.outline.n_points == points && actual.outline.n_contours == contours, "export counts");
+    Require(actual.outline.n_points == expected.outline.n_points &&
+            actual.outline.n_contours == expected.outline.n_contours, "counts match libSceFreeType");
+    for (std::uint32_t i = 0; i < points; ++i)
+        Require(actual.points[i].x == expected.points[i].x && actual.points[i].y == expected.points[i].y &&
+                actual.tags[i] == expected.tags[i], "points match libSceFreeType");
+    for (std::uint32_t i = 0; i < contours; ++i)
+        Require(actual.contours[i] == expected.contours[i], "contours match libSceFreeType");
     FT_Stroker_Done_nid_postfix(forwarded);
     FT_Stroker_Done_nid_postfix(direct);
     Require(FT_Done_FreeType(library.host) == 0, "release FreeType");

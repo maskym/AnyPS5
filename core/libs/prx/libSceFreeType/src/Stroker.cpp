@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -113,7 +114,7 @@ std::vector<FT_Vector> NativePoints(const OutlineArrays& arrays, const char* fun
     return points;
 }
 
-void ExportBorder(void* stroker, std::int32_t border, GuestOutline* outline, const char* function) {
+void ExportBorder(void* stroker, std::int32_t border, GuestOutline* outline) {
     if (!stroker || !outline || (border != FT_STROKER_BORDER_LEFT && border != FT_STROKER_BORDER_RIGHT)) return;
     if constexpr (SharedPoints) {
         FT_Outline native = NativeOutline(*outline, reinterpret_cast<FT_Vector*>(outline->points));
@@ -121,7 +122,25 @@ void ExportBorder(void* stroker, std::int32_t border, GuestOutline* outline, con
         outline->n_contours = native.n_contours;
         outline->n_points = native.n_points;
     } else {
-        NotImplemented_nid_no_patch(function);
+        const std::uint16_t firstPoints = outline->n_points;
+        const std::uint16_t firstContours = outline->n_contours;
+        const auto packed = reinterpret_cast<std::uintptr_t>(outline->points) + std::uintptr_t{firstPoints} * sizeof(GuestVector);
+        FT_Outline native = NativeOutline(*outline, reinterpret_cast<FT_Vector*>(packed - std::uintptr_t{firstPoints} * sizeof(FT_Vector)));
+        const auto host = static_cast<FT_Stroker>(stroker);
+        const auto side = static_cast<FT_StrokerBorder>(border);
+        FT_Stroker_ExportBorder(host, side, &native);
+        std::size_t added = static_cast<std::uint16_t>(native.n_points - firstPoints);
+        FT_UInt borderPoints = 0;
+        FT_UInt borderContours = 0;
+        if ((native.n_points != firstPoints || native.n_contours != firstContours) && FT_Stroker_GetBorderCounts(host, side, &borderPoints, &borderContours) == 0) added = borderPoints;
+        for (std::size_t index = added; index-- > 0;) {
+            FT_Vector point{};
+            std::memcpy(&point, reinterpret_cast<const void*>(packed + index * sizeof(FT_Vector)), sizeof(point));
+            const GuestVector wide{point.x, point.y};
+            std::memcpy(reinterpret_cast<void*>(packed + index * sizeof(GuestVector)), &wide, sizeof(wide));
+        }
+        outline->n_contours = native.n_contours;
+        outline->n_points = native.n_points;
     }
 }
 
@@ -215,12 +234,12 @@ int APS5_VABI FT_Stroker_ParseOutline_nid_postfix(void* stroker, const GuestOutl
 }
 
 void APS5_VABI FT_Stroker_ExportBorder_nid_postfix(void* stroker, std::int32_t border, GuestOutline* outline) {
-    ExportBorder(stroker, border, outline, __func__);
+    ExportBorder(stroker, border, outline);
 }
 
 void StrokerExport_nid_no_patch(void* stroker, GuestOutline* outline) {
-    ExportBorder(stroker, FT_STROKER_BORDER_LEFT, outline, "FT_Stroker_Export_nid_postfix");
-    ExportBorder(stroker, FT_STROKER_BORDER_RIGHT, outline, "FT_Stroker_Export_nid_postfix");
+    ExportBorder(stroker, FT_STROKER_BORDER_LEFT, outline);
+    ExportBorder(stroker, FT_STROKER_BORDER_RIGHT, outline);
 }
 
 void APS5_VABI FT_Stroker_Export_nid_postfix(void* stroker, GuestOutline* outline) {

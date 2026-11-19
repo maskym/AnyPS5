@@ -523,13 +523,9 @@ static void TestExportBorder(GuestLibrary& library, FT_Library native) {
                 Require(FT_Stroker_GetBorderCounts(pair.native, static_cast<FT_StrokerBorder>(border), &nativePoints, &nativeContours) == 0);
                 Require(points == nativePoints && contours == nativeContours);
                 Target target(3, points, contours);
-                if constexpr (SharedPoints) {
-                    FT_Stroker_ExportBorder_nid_postfix(pair.guest, border, &target.guest);
-                    FT_Stroker_ExportBorder(pair.native, static_cast<FT_StrokerBorder>(border), &target.native);
-                    Require(target.Matches() && target.guest.n_points == 3 + points && target.guest.n_contours == 1 + contours);
-                } else {
-                    Require(Throws([&] { FT_Stroker_ExportBorder_nid_postfix(pair.guest, border, &target.guest); }) && target.Pristine());
-                }
+                FT_Stroker_ExportBorder_nid_postfix(pair.guest, border, &target.guest);
+                FT_Stroker_ExportBorder(pair.native, static_cast<FT_StrokerBorder>(border), &target.native);
+                Require(target.Matches() && target.guest.n_points == 3 + points && target.guest.n_contours == 1 + contours);
                 exported += points;
             }
         }
@@ -547,28 +543,22 @@ static void TestExport(GuestLibrary& library, FT_Library native) {
             Require(FT_Stroker_GetCounts_nid_postfix(pair.guest, &points, &contours) == 0 && points != 0 && contours != 0);
             pair.CountsMatch();
             Target target(3, points, contours);
-            if constexpr (SharedPoints) {
-                FT_Stroker_Export_nid_postfix(pair.guest, &target.guest);
-                FT_Stroker_Export(pair.native, &target.native);
-                Require(target.Matches() && target.guest.n_points == 3 + points && target.guest.n_contours == 1 + contours);
-            } else {
-                Require(Throws([&] { FT_Stroker_Export_nid_postfix(pair.guest, &target.guest); }) && target.Pristine());
-            }
+            FT_Stroker_Export_nid_postfix(pair.guest, &target.guest);
+            FT_Stroker_Export(pair.native, &target.native);
+            Require(target.Matches() && target.guest.n_points == 3 + points && target.guest.n_contours == 1 + contours);
         }
     }
-    if constexpr (SharedPoints) {
-        Shape square = SquareOutline();
-        Pair pair(library, native);
-        Require(pair.Parse(square.Guest(), square.Native(), 0) == 0);
-        std::uint32_t points = 0;
-        std::uint32_t contours = 0;
-        Require(FT_Stroker_GetCounts_nid_postfix(pair.guest, &points, &contours) == 0 && points > 6);
-        pair.CountsMatch();
-        Target target(65530, points, contours);
-        FT_Stroker_Export_nid_postfix(pair.guest, &target.guest);
-        FT_Stroker_Export(pair.native, &target.native);
-        Require(target.Matches() && target.guest.n_points == static_cast<std::uint16_t>(65530 + points) && target.guest.n_points < 65530);
-    }
+    Shape square = SquareOutline();
+    Pair pair(library, native);
+    Require(pair.Parse(square.Guest(), square.Native(), 0) == 0);
+    std::uint32_t points = 0;
+    std::uint32_t contours = 0;
+    Require(FT_Stroker_GetCounts_nid_postfix(pair.guest, &points, &contours) == 0 && points > 6);
+    pair.CountsMatch();
+    Target target(65530, points, contours);
+    FT_Stroker_Export_nid_postfix(pair.guest, &target.guest);
+    FT_Stroker_Export(pair.native, &target.native);
+    Require(target.Matches() && target.guest.n_points == static_cast<std::uint16_t>(65530 + points) && target.guest.n_points < 65530);
 }
 
 static void TestExportUnchanged(GuestLibrary& library, FT_Library native) {
@@ -581,16 +571,11 @@ static void TestExportUnchanged(GuestLibrary& library, FT_Library native) {
     Pair pair(library, native);
     Require(pair.Parse(square.Guest(), square.Native(), 0) == 0);
     Target target(3, points, contours);
-    if constexpr (SharedPoints) {
-        FT_Stroker_Export_nid_postfix(pair.guest, &target.guest);
-        FT_Stroker_Export(pair.native, &target.native);
-        for (const std::int32_t border : {0, 1}) {
-            FT_Stroker_ExportBorder_nid_postfix(pair.guest, border, &target.guest);
-            FT_Stroker_ExportBorder(pair.native, static_cast<FT_StrokerBorder>(border), &target.native);
-        }
-    } else {
-        Require(Throws([&] { FT_Stroker_Export_nid_postfix(pair.guest, &target.guest); }));
-        Require(Throws([&] { FT_Stroker_ExportBorder_nid_postfix(pair.guest, 0, &target.guest); }));
+    FT_Stroker_Export_nid_postfix(pair.guest, &target.guest);
+    FT_Stroker_Export(pair.native, &target.native);
+    for (const std::int32_t border : {0, 1}) {
+        FT_Stroker_ExportBorder_nid_postfix(pair.guest, border, &target.guest);
+        FT_Stroker_ExportBorder(pair.native, static_cast<FT_StrokerBorder>(border), &target.native);
     }
     Require(target.Pristine());
     pair.CountsMatch();
@@ -607,19 +592,15 @@ static void TestExportUnchanged(GuestLibrary& library, FT_Library native) {
     FT_Stroker_Export_nid_postfix(pair.guest, nullptr);
     FT_Stroker_Export(pair.native, nullptr);
     Require(target.Pristine());
-    if constexpr (SharedPoints) {
-        FT_Stroker_Export_nid_postfix(pair.guest, &target.guest);
-        FT_Stroker_Export(pair.native, &target.native);
-        Require(target.Matches() && target.guest.n_points == 3 + points && target.guest.n_contours == 1 + contours);
-        FT_Stroker_Rewind_nid_postfix(pair.guest);
-        FT_Stroker_Rewind(pair.native);
-        Target rewound(3, points, contours);
-        FT_Stroker_Export_nid_postfix(pair.guest, &rewound.guest);
-        FT_Stroker_Export(pair.native, &rewound.native);
-        Require(rewound.Pristine());
-    } else {
-        Require(Throws([&] { FT_Stroker_ExportBorder_nid_postfix(pair.guest, 1, &target.guest); }) && target.Pristine());
-    }
+    FT_Stroker_Export_nid_postfix(pair.guest, &target.guest);
+    FT_Stroker_Export(pair.native, &target.native);
+    Require(target.Matches() && target.guest.n_points == 3 + points && target.guest.n_contours == 1 + contours);
+    FT_Stroker_Rewind_nid_postfix(pair.guest);
+    FT_Stroker_Rewind(pair.native);
+    Target rewound(3, points, contours);
+    FT_Stroker_Export_nid_postfix(pair.guest, &rewound.guest);
+    FT_Stroker_Export(pair.native, &rewound.native);
+    Require(rewound.Pristine());
 }
 
 int main() {

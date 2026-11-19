@@ -79,10 +79,15 @@ def main():
                 case = work / f"{windows}-identity-{index}"
                 case.mkdir()
                 insensitive = (work / f"{windows}-IDENTITY-{index}").exists()
-                if (directory == "linked" and os.name == "nt") or (executable != "picker/picker.bin" and not insensitive):
+                if executable != "picker/picker.bin" and not insensitive:
                     continue
                 if directory == "linked":
-                    (case / "linked").symlink_to("picker", target_is_directory=True)
+                    (case / "picker").mkdir()
+                    if os.name == "nt":
+                        import _winapi
+                        _winapi.CreateJunction(str(case / "picker"), str(case / "linked"))
+                    else:
+                        (case / "linked").symlink_to("picker", target_is_directory=True)
                 elif not insensitive:
                     (case / directory).mkdir()
                 result, output = convert(case, windows, ["--module-dir", directory, "--executable", executable])
@@ -119,11 +124,11 @@ def main():
                     assert "libSceVideoOut.prx" in needed_libraries(output.read_bytes())
                     assert "libScePad.prx" in needed_libraries(secondary.read_bytes())
 
-        if os.name != "nt":
-            result, output = convert(work / "macos-picker", False, ["--macos", "--executable", "picker/picker.bin"])
-            assert result.returncode == 0, (result.stdout, result.stderr)
-            for executable in (output, output.parent / "picker.picker.bin.elf"):
-                assert executable.read_bytes().startswith(bytes.fromhex("cffaedfe")), executable
+        result, output = convert(work / "macos-picker", False, ["--macos", "--executable", "picker/picker.bin"])
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        for executable in (output, output.parent / "picker.picker.bin.elf"):
+            assert executable.read_bytes().startswith(bytes.fromhex("cffaedfe")), executable
+            if os.name != "nt":
                 assert stat.S_IMODE(executable.stat().st_mode) & 0o111 == 0o111, (executable, oct(executable.stat().st_mode))
 
 

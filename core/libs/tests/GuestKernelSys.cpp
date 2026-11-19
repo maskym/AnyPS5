@@ -1540,9 +1540,8 @@ int main() {
     Require(readlinkat_nid_postfix(-100, nullptr, buffer, hugeSize) == -1 && Error() == 22);
     Require(readlinkat_nid_postfix(-100, "", buffer, hugeSize) == -1 && Error() == 22);
     Require(readlinkat_nid_postfix(-100, nullptr, buffer, sizeof(buffer)) == -1 && Error() == 14);
-#ifndef _WIN32
     Require(readlink_nid_postfix((root / std::string(300, 'n')).string().c_str(), buffer, sizeof(buffer)) == -1 && Error() == 63);
-#else
+#ifdef _WIN32
     const auto setReparseTag = [](const std::filesystem::path& path, DWORD tag) {
         const HANDLE handle = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
             FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);

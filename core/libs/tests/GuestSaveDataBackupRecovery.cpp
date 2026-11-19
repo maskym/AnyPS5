@@ -16,6 +16,14 @@
 #include <vector>
 #ifdef _WIN32
 #include <process.h>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <winioctl.h>
 #else
 #include <spawn.h>
 #include <sys/wait.h>
@@ -326,7 +334,96 @@ void Delete(const std::string& executable) {
     Require(!std::filesystem::exists(Backup));
 }
 
-#ifndef _WIN32
+#ifdef _WIN32
+class Protection {
+public:
+    explicit Protection(const std::filesystem::path& directory)
+        : handle(CreateFileW((directory / "surviving.bin").c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)) {
+        Require(handle != INVALID_HANDLE_VALUE);
+    }
+    ~Protection() { CloseHandle(handle); }
+    Protection(const Protection&) = delete;
+    Protection& operator=(const Protection&) = delete;
+
+private:
+    HANDLE handle;
+};
+
+bool LinkDirectory(const std::filesystem::path& target, const std::filesystem::path& link) {
+    std::error_code error;
+    if (!std::filesystem::create_directory(link, error)) return false;
+    const auto printName = std::filesystem::absolute(target).make_preferred().wstring();
+    const auto substituteName = L"\\??\\" + printName;
+    struct MountPoint {
+        ULONG tag;
+        USHORT dataLength;
+        USHORT reserved;
+        USHORT substituteOffset;
+        USHORT substituteLength;
+        USHORT printOffset;
+        USHORT printLength;
+        wchar_t names[2048];
+    } data{};
+    if (substituteName.size() + printName.size() + 2 > std::size(data.names)) return false;
+    data.tag = IO_REPARSE_TAG_MOUNT_POINT;
+    data.substituteLength = static_cast<USHORT>(substituteName.size() * sizeof(wchar_t));
+    data.printOffset = static_cast<USHORT>((substituteName.size() + 1) * sizeof(wchar_t));
+    data.printLength = static_cast<USHORT>(printName.size() * sizeof(wchar_t));
+    data.dataLength = static_cast<USHORT>(8 + data.printOffset + data.printLength + sizeof(wchar_t));
+    std::memcpy(data.names, substituteName.c_str(), data.substituteLength + sizeof(wchar_t));
+    std::memcpy(reinterpret_cast<char*>(data.names) + data.printOffset, printName.c_str(), data.printLength + sizeof(wchar_t));
+    const HANDLE handle = CreateFileW(link.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    bool set = false;
+    if (handle != INVALID_HANDLE_VALUE) {
+        DWORD returned = 0;
+        set = DeviceIoControl(handle, FSCTL_SET_REPARSE_POINT, &data, 8 + data.dataLength, nullptr, 0, &returned, nullptr) != 0;
+        CloseHandle(handle);
+    }
+    if (!set) RemoveDirectoryW(link.c_str());
+    return set;
+}
+
+bool IsLink(const std::filesystem::path& path) {
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+}
+
+bool Privileged() {
+    return false;
+}
+#else
+class Protection {
+public:
+    explicit Protection(const std::filesystem::path& directory) : directory(directory) {
+        std::filesystem::permissions(directory, std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec);
+    }
+    ~Protection() {
+        std::error_code error;
+        std::filesystem::permissions(directory, std::filesystem::perms::owner_all, error);
+    }
+    Protection(const Protection&) = delete;
+    Protection& operator=(const Protection&) = delete;
+
+private:
+    std::filesystem::path directory;
+};
+
+bool LinkDirectory(const std::filesystem::path& target, const std::filesystem::path& link) {
+    std::error_code error;
+    std::filesystem::create_directory_symlink(target, link, error);
+    if (error) std::fprintf(stderr, "directory symlink unavailable: %s\n", error.message().c_str());
+    return !error;
+}
+
+bool IsLink(const std::filesystem::path& path) {
+    return std::filesystem::is_symlink(path);
+}
+
+bool Privileged() {
+    return geteuid() == 0;
+}
+#endif
+
 void DeleteFailure(const std::string& executable) {
     for (const bool interrupted : {false, true}) {
         const auto original = Start(executable);
@@ -335,15 +432,11 @@ void DeleteFailure(const std::string& executable) {
         Write(protectedDirectory / "surviving.bin", "keep this backup recoverable");
         const auto metadata = Read("_sd/kept.param");
         const auto blocks = Read("_sd/kept.blocks");
-        std::filesystem::permissions(protectedDirectory, std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec);
         int result = -1;
-        try {
+        {
+            const Protection protection(protectedDirectory);
             result = Run(executable, {"delete", "invalid"});
-        } catch (...) {
-            std::filesystem::permissions(protectedDirectory, std::filesystem::perms::owner_all);
-            throw;
         }
-        std::filesystem::permissions(protectedDirectory, std::filesystem::perms::owner_all);
         Require(result == 0);
         Require(Read(protectedDirectory / "surviving.bin") == "keep this backup recoverable");
         Require(Read("_sd/kept.param") == metadata && Read("_sd/kept.blocks") == blocks);
@@ -358,7 +451,6 @@ void DeleteFailure(const std::string& executable) {
         Require(Run(executable, {"check", "missing"}) == 0);
     }
 }
-#endif
 
 void Rollback(const std::string& executable) {
     for (const char* count : {"1", "2"}) {
@@ -453,16 +545,13 @@ bool Links(const std::string& executable) {
     Require(Run(executable, {"backup", "new", "backup.place"}) == Interrupted);
     const auto victim = std::filesystem::absolute("victim");
     std::filesystem::rename(Old, victim);
-    std::error_code error;
-    std::filesystem::create_directory_symlink(victim, Old, error);
-    if (error) {
+    if (!LinkDirectory(victim, Old)) {
         std::filesystem::rename(victim, Old);
-        std::fprintf(stderr, "directory symlink unavailable: %s\n", error.message().c_str());
         return false;
     }
     const auto staged = Tree(Staged);
     Require(Run(executable, {"check", "invalid"}) == 0);
-    Require(Tree(victim) == original && Tree(Staged) == staged && std::filesystem::is_symlink(Old));
+    Require(Tree(victim) == original && Tree(Staged) == staged && IsLink(Old));
     std::filesystem::remove(Old);
     std::filesystem::rename(victim, Old);
     Require(Run(executable, {"check", "old"}) == 0);
@@ -492,12 +581,10 @@ int main(int argc, char** argv) {
         else if (operation == "retry") Retry(executable);
         else if (operation == "restore") Restore(executable);
         else if (operation == "delete") Delete(executable);
-#ifndef _WIN32
         else if (operation == "delete_failure") {
-            if (geteuid() == 0) result = 77;
+            if (Privileged()) result = 77;
             else DeleteFailure(executable);
         }
-#endif
         else if (operation == "rollback") Rollback(executable);
         else if (operation == "delete_sidecar_failure") DeleteSidecarFailure(executable);
         else if (operation == "invalid") Invalid(executable);

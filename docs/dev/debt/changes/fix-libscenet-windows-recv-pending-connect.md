@@ -1,0 +1,5 @@
+# libSceNet
+
+## add Functional
+
+- [sceNetRecv, sceNetRecvfrom and sceNetRecvmsg](../../../core/libs/prx/libSceNet/Export.cpp) (libSceNet) on a connecting stream socket wait on Windows for the connect to end, polling the host socket every 10 ms. Winsock fails such a receive with `WSAENOTCONN`, where FreeBSD 11.4's `soreceive_generic` (`sys/kern/uipc_socket.c`) fails with `ENOTCONN` only when the socket is neither connected nor connecting. A socket is connecting after a non-blocking `sceNetConnect` gave `EINPROGRESS` or a blocking one expired, while the host has no `SO_CONNECT_TIME`. A non-blocking socket or `MSG_DONTWAIT` fails with `EAGAIN` at once, and the receive timeout ends the wait with `EAGAIN`; when the connect ends first, the host receive waits again for the whole timeout. An abort, a close or a failed connect (host `SO_ERROR` set) ends the wait, even without blocking; after a failed connect the receive fails with `ENOTCONN`, where FreeBSD gives the connect error first. Closes when: compared with a console

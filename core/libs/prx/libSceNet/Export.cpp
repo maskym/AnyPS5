@@ -5,6 +5,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <mswsock.h>
 #include <windows.h>
 #include <iphlpapi.h>
 #else
@@ -903,10 +904,47 @@ int wait_for_datagram(const Sock& socket, std::chrono::steady_clock::time_point 
 #endif
 }
 
+#ifdef _WIN32
+int wait_for_connect(int s, const Sock& socket, int flags) {
+    if (!socket.connectPending && socket.native->connectExpired.load() == 0) return 0;
+    const bool wait = !socket.native->nonblock && (flags & NET_MSG_DONTWAIT) == 0;
+    const int timeout = socket.native->receiveTimeout;
+    const auto deadline = timeout > 0
+        ? std::chrono::steady_clock::now() + std::chrono::microseconds(timeout)
+        : std::chrono::steady_clock::time_point::max();
+    for (;;) {
+        DWORD seconds = 0;
+        int size = sizeof(seconds);
+        if (::getsockopt(socket.native->value, SOL_SOCKET, SO_CONNECT_TIME, reinterpret_cast<char*>(&seconds), &size) != 0 || seconds != 0xFFFFFFFFu) return 0;
+        {
+            std::lock_guard lk(g_mutex);
+            const auto it = g_socks.find(s);
+            if (it == g_socks.end() || it->second.native != socket.native || it->second.aborted) return 0;
+        }
+        int error = 0;
+        size = sizeof(error);
+        if (::getsockopt(socket.native->value, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &size) != 0 || error != 0) return 0;
+        if (!wait) return NET_EAGAIN;
+        int milliseconds = 10;
+        if (timeout > 0) {
+            const auto remaining = deadline - std::chrono::steady_clock::now();
+            if (remaining <= std::chrono::steady_clock::duration::zero()) return NET_EAGAIN;
+            milliseconds = static_cast<int>(std::min<std::int64_t>(std::chrono::ceil<std::chrono::milliseconds>(remaining).count(), milliseconds));
+        }
+        WSAPOLLFD state{};
+        state.fd = socket.native->value;
+        state.events = POLLWRNORM | POLLRDNORM;
+        const int ready = WSAPoll(&state, 1, milliseconds);
+        if (ready < 0) return native_error();
+        if (ready > 0) return 0;
+    }
+}
+#endif
+
 int wait_for_local_address(int s, const Sock& socket, bool empty, int flags) {
     if (socket.type == NET_SOCK_STREAM) {
 #ifdef _WIN32
-        if (!empty) return 0;
+        if (!empty) return wait_for_connect(s, socket, flags);
         sockaddr_storage peer{};
         NativeLength length = sizeof(peer);
         if (::getpeername(socket.native->value, reinterpret_cast<sockaddr*>(&peer), &length) != 0) {

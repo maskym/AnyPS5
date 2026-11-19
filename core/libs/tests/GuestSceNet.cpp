@@ -1271,13 +1271,46 @@ static void CheckConnectTimeoutExpiry() {
     std::uint32_t length = sizeof(value);
     Require(sceNetGetsockopt(pending, 0xffff, 0x1200, &value, &length) == 0 && value == 0);
     Require(sceNetGetsockopt(pending, 0xffff, 0x1007, &value, &length) == 0 && value == 0);
-#ifndef _WIN32
     const int receiveTimeout = 50000;
     Require(sceNetSetsockopt(pending, 0xffff, 0x1106, &receiveTimeout, sizeof(receiveTimeout)) == 0);
     char buffer[8]{};
     const auto start = std::chrono::steady_clock::now();
     Require(Failed(sceNetRecv(pending, buffer, sizeof(buffer), 0), 35));
     Require(std::chrono::steady_clock::now() - start >= std::chrono::milliseconds(40));
+#ifdef _WIN32
+    Require(Failed(sceNetRecv(pending, buffer, sizeof(buffer), 0x80), 35));
+    const int noTimeout = 0;
+    Require(sceNetSetsockopt(pending, 0xffff, 0x1106, &noTimeout, sizeof(noTimeout)) == 0);
+    auto waiter = std::async(std::launch::async, [pending] {
+        char ignored[4];
+        return sceNetRecv(pending, ignored, sizeof(ignored), 0);
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    Require(waiter.wait_for(std::chrono::seconds(0)) == std::future_status::timeout);
+    Require(sceNetSocketAbort(pending, 0) == 0);
+    Require(waiter.wait_for(std::chrono::seconds(1)) == std::future_status::ready && waiter.get() < 0);
+    const int closed = sceNetSocket("connect-expiry-closed", 2, 1, 6);
+    std::array<std::uint8_t, 16> closedAddress{16, 2, 0, 0, 127, 0, 0, 1};
+    Require(closed >= 0 && sceNetBind_nid_postfix(closed, closedAddress.data(), closedAddress.size()) == 0);
+    size = closedAddress.size();
+    Require(sceNetGetsockname(closed, closedAddress.data(), &size) == 0);
+    const int refused = sceNetSocket("connect-expiry-refused", 2, 1, 6);
+    const int nonblocking = 1;
+    Require(refused >= 0 && sceNetSetsockopt(refused, 0xffff, 0x1200, &nonblocking, sizeof(nonblocking)) == 0);
+    Require(Failed(sceNetConnect(refused, closedAddress.data(), closedAddress.size()), 36));
+    const auto failing = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    int connectError = 0;
+    while (connectError == 0 && std::chrono::steady_clock::now() < failing) {
+        length = sizeof(connectError);
+        Require(sceNetGetsockopt(refused, 0xffff, 0x1007, &connectError, &length) == 0);
+        if (connectError == 0) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    Require(connectError != 0);
+    const auto refusedReceive = sceNetRecv(refused, buffer, sizeof(buffer), 0x80);
+    Require(refusedReceive < 0 && !Failed(refusedReceive, 35));
+    const auto refusedNonblocking = sceNetRecv(refused, buffer, sizeof(buffer), 0);
+    Require(refusedNonblocking < 0 && !Failed(refusedNonblocking, 35));
+    Require(sceNetSocketClose(refused) == 0 && sceNetSocketClose(closed) == 0);
 #endif
     Require(sceNetSocketClose(pending) == 0);
     for (const int descriptor : queued) Require(sceNetSocketClose(descriptor) == 0);

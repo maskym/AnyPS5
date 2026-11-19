@@ -12,7 +12,9 @@
 #include <stdexcept>
 #include <new>
 #include <string>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -49,17 +51,31 @@ template<typename TCall> static void Capped(TCall call) {
 #endif
 }
 
-#ifndef _WIN32
 class GuardedPage {
 public:
     GuardedPage() {
+#ifdef _WIN32
+        SYSTEM_INFO info{};
+        GetSystemInfo(&info);
+        const std::size_t page = info.dwPageSize;
+        mapping = VirtualAlloc(nullptr, page * 2, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        DWORD previous{};
+        if (mapping == nullptr || VirtualProtect(static_cast<unsigned char*>(mapping) + page, page, PAGE_NOACCESS, &previous) == 0) std::abort();
+#else
         const auto page = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
         mapping = mmap(nullptr, page * 2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (mapping == MAP_FAILED || mprotect(static_cast<unsigned char*>(mapping) + page, page, PROT_NONE) != 0) std::abort();
+#endif
         end = static_cast<unsigned char*>(mapping) + page;
         bytes = page * 2;
     }
-    ~GuardedPage() { munmap(mapping, bytes); }
+    ~GuardedPage() {
+#ifdef _WIN32
+        VirtualFree(mapping, 0, MEM_RELEASE);
+#else
+        munmap(mapping, bytes);
+#endif
+    }
     unsigned char* Tail(std::size_t count) const { return end - count; }
 
 private:
@@ -67,7 +83,6 @@ private:
     unsigned char* end = nullptr;
     std::size_t bytes = 0;
 };
-#endif
 
 struct TestStack {
     int num;
@@ -511,7 +526,6 @@ static void TestOversizedText() {
         decoded.values[2].data = reinterpret_cast<unsigned char*>(std::uintptr_t {0x10});
         Capped([&] { RejectsPreservingErrno([&] { X509_NAME_get_text_by_NID_nid_postfix(&decoded.name, 13, buffer, INT_MAX); }); });
         Require(BufferHolds(buffer, "", 0));
-#ifndef _WIN32
         GuardedPage page;
         std::memcpy(page.Tail(5), "first", 5);
         decoded.values[2].data = page.Tail(5);
@@ -520,7 +534,6 @@ static void TestOversizedText() {
         decoded.values[2].length = 5;
         Capped([&] { Require(X509_NAME_get_text_by_NID_nid_postfix(&decoded.name, 13, buffer, INT_MAX) == 5); });
         Require(std::memcmp(buffer, "first", 6) == 0);
-#endif
     }
     {
         DecodedName decoded;

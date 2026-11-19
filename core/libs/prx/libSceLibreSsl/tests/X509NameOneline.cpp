@@ -14,7 +14,9 @@
 #include <string>
 #include <utility>
 #include <vector>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -349,10 +351,18 @@ void OversizedValues() {
         RejectsPreservingErrno([&] { X509_NAME_oneline_nid_postfix(name, buffer, sizeof(buffer)); }, "an oversized unmapped value");
         RejectsPreservingErrno([&] { X509_NAME_oneline_nid_postfix(name, nullptr, 0); }, "an oversized unmapped value into a grown buffer");
     });
-#ifndef _WIN32
+#ifdef _WIN32
+    SYSTEM_INFO info{};
+    GetSystemInfo(&info);
+    const std::size_t page = info.dwPageSize;
+    void* mapping = VirtualAlloc(nullptr, page * 2, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    DWORD previous{};
+    Require(mapping != nullptr && VirtualProtect(static_cast<unsigned char*>(mapping) + page, page, PAGE_NOACCESS, &previous) != 0, "a guard page");
+#else
     const auto page = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
     void* mapping = mmap(nullptr, page * 2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     Require(mapping != MAP_FAILED && mprotect(static_cast<unsigned char*>(mapping) + page, page, PROT_NONE) == 0, "a guard page");
+#endif
     auto* tail = static_cast<unsigned char*>(mapping) + page - 5;
     std::memcpy(tail, "first", 5);
     value->data = tail;
@@ -362,6 +372,9 @@ void OversizedValues() {
     });
     value->length = 5;
     Capped([&] { Require(Oneline(name, 64) == "/CN=first", "a value ending at a guard page"); });
+#ifdef _WIN32
+    VirtualFree(mapping, 0, MEM_RELEASE);
+#else
     munmap(mapping, page * 2);
 #endif
     Require(buffer[0] == 'Z', "rejected oversized values leave the caller buffer unchanged");

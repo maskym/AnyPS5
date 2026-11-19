@@ -12,6 +12,9 @@
 #include <string_view>
 #include <system_error>
 #include <tuple>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace Cli {
 
@@ -22,6 +25,23 @@ struct CandidateHeader {
     bool Self = false;
     std::uint16_t Type = 0;
 };
+
+bool IsDirectoryLink(const std::filesystem::path& path) {
+#ifdef _WIN32
+    WIN32_FIND_DATAW data{};
+    const auto handle = FindFirstFileW(path.c_str(), &data);
+    if (handle == INVALID_HANDLE_VALUE) return false;
+    FindClose(handle);
+    if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !(data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+    if (data.dwReserved0 == IO_REPARSE_TAG_SYMLINK) return true;
+    if (data.dwReserved0 != IO_REPARSE_TAG_MOUNT_POINT) return false;
+    wchar_t volume[MAX_PATH];
+    return GetVolumeNameForVolumeMountPointW((path.wstring() + L"\\").c_str(), volume, MAX_PATH) == 0;
+#else
+    static_cast<void>(path);
+    return false;
+#endif
+}
 
 std::optional<CandidateHeader> TryReadCandidateHeader(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary);
@@ -146,6 +166,7 @@ void ReportUnconvertedNeeded(const NativeModules& modules, const std::vector<std
     std::vector<Found> found;
     std::error_code error;
     for (auto entry = std::filesystem::recursive_directory_iterator(modules.Root, std::filesystem::directory_options::skip_permission_denied, error); !error && entry != std::filesystem::recursive_directory_iterator(); entry.increment(error)) {
+        if (IsDirectoryLink(entry->path())) entry.disable_recursion_pending();
         const auto filename = FoldedName(Io::Utf8Path(entry->path().filename()), foldCase);
         if (Domain::ModuleSuffix(filename).empty()) continue;
         const auto stem = stems.find(std::string(ModuleStem(filename)));

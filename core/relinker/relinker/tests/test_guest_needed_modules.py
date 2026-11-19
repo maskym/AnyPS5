@@ -195,6 +195,18 @@ def check_needed_outside(relinker, work):
                 assert convert(case) == expected
             finally:
                 (case / "locked").chmod(0o755)
+    else:
+        import _winapi
+        for label, link in (("loop", Path("Media") / "Nested" / "up"), ("alias", Path("Alias")), ("named", Path("Media") / "needed.sprx")):
+            case = work / f"outside-junction-{label}"
+            (case / "sce_module").mkdir(parents=True)
+            (case / "Media" / "Nested").mkdir(parents=True)
+            (case / "Media" / "needed.prx").write_bytes(sce_module)
+            _winapi.CreateJunction(str(case / "Media"), str(case / link))
+            try:
+                assert convert(case) == [message + "needed.prx at Media/needed.prx; add --module-dir Media"]
+            finally:
+                os.rmdir(case / link)
 
 
 def check_unavailable_unused(relinker, work):

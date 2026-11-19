@@ -673,9 +673,15 @@ int APS5_VABI _Daysto_nid_postfix(int year, int month) {
     return static_cast<int>(leapDays + static_cast<std::uint32_t>(common ? DaysBeforeMonth[month] : LeapDaysBeforeMonth[month]));
 }
 
-int APS5_VABI _Deletegloballocale_nid_postfix() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
+void APS5_VABI _Deletegloballocale_nid_postfix(void* pointer) {
+    if (pointer == nullptr) throw std::invalid_argument("_Deletegloballocale: null pointer");
+    auto* locale = *static_cast<GuestLocale::Implementation**>(pointer);
+    if (locale == nullptr) return;
+    if (locale->base.vtable == nullptr || locale->base.vtable->release == nullptr) throw std::invalid_argument("_Deletegloballocale: empty vtable slot");
+    auto* released = locale->base.vtable->release(&locale->base);
+    if (released == nullptr) return;
+    if (released->vtable == nullptr || released->vtable->deleteObject == nullptr) throw std::invalid_argument("_Deletegloballocale: empty vtable slot");
+    released->vtable->deleteObject(released);
 }
 
 int APS5_VABI _Erfc_nid_postfix() {

@@ -39,6 +39,14 @@ void Require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
 }
 
+void SetVariable(const char* name, const char* value) {
+#ifdef _WIN32
+    Require(_putenv_s(name, value) == 0, std::string("could not set ") + name);
+#else
+    Require(::setenv(name, value, 1) == 0, std::string("could not set ") + name);
+#endif
+}
+
 int passed = 0, failed = 0, notRun = 0;
 void Run(const char* name, void (*test)()) {
     if (const char* only = std::getenv("RR_ONLY"); only != nullptr && std::string(only) != name) return;
@@ -374,13 +382,10 @@ void PrivacyIsolatedTest() {
 }
 
 void PrivacySweepTest() {
-#ifdef _WIN32
-    throw NotRun("environment canaries are POSIX here");
-#else
-    ::setenv("USER", "canaryuser9", 1);
-    ::setenv("LOGNAME", "canaryuser9", 1);
-    ::setenv("HOME", "/home/canaryuser9", 1);
-    ::setenv("HOSTNAME", "canary-host-9", 1);
+    SetVariable("USER", "canaryuser9");
+    SetVariable("LOGNAME", "canaryuser9");
+    SetVariable("HOME", "/home/canaryuser9");
+    SetVariable("HOSTNAME", "canary-host-9");
     Directory executable, user;
     auto settings = SettingsFor(executable.path, user.path, IdA);
     settings.game = [] {
@@ -398,18 +403,14 @@ void PrivacySweepTest() {
         Require(!Contains(report, canary), std::string("the output contains the canary ") + canary + ": " + report);
     }
     Require(Contains(report, "\"source\": null") && Contains(report, "\"name\": null"), "the private fields were not dropped: " + report);
-#endif
 }
 
 RunReport::Settings Covered(const fs::path& executable, const fs::path& user, const char* id);
 
 void PrivacySweepEverythingTest() {
-#ifdef _WIN32
-    throw NotRun("environment canaries are POSIX here");
-#else
-    ::setenv("USER", "canaryuser9", 1);
-    ::setenv("HOME", "/home/canaryuser9", 1);
-    ::setenv("HOSTNAME", "canary-host-9", 1);
+    SetVariable("USER", "canaryuser9");
+    SetVariable("HOME", "/home/canaryuser9");
+    SetVariable("HOSTNAME", "canary-host-9");
     Directory executable, user;
     auto settings = Covered(executable.path, user.path, IdA);
     settings.game = [] {
@@ -432,7 +433,6 @@ void PrivacySweepEverythingTest() {
         Require(!Contains(report, canary), std::string("the report contains the canary ") + canary + ": " + report);
     }
     Require(Contains(report, "\"fn_ok\""), "the clean entry next to the canaries was lost: " + report);
-#endif
 }
 
 void StructuredFieldCanaryTest() {
@@ -782,8 +782,8 @@ void OsVersionRefusedByNamesTest() {
 }
 
 void HostProbeTest() {
-#ifndef __linux__
-    throw NotRun("the host probe is checked on Linux here");
+#if !defined(__linux__) && !defined(_WIN32)
+    throw NotRun("the host probe is checked on Linux and Windows here");
 #else
     const auto host = RunReport::ProbeHost();
     Require(host.ramGiB && *host.ramGiB >= 1, "the memory size of this host was not read");
@@ -805,10 +805,7 @@ void HostProbeTest() {
 }
 
 void NumericLocaleTest() {
-#ifdef _WIN32
-    throw NotRun("locale names differ");
-#else
-    const char* locales[] = {"de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "de_DE", "fr_FR"};
+    const char* locales[] = {"de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "de_DE", "fr_FR", "de-DE", "fr-FR"};
     const std::string previous = std::setlocale(LC_NUMERIC, nullptr) ? std::setlocale(LC_NUMERIC, nullptr) : "C";
     bool changed = false;
     for (const char* name : locales) {
@@ -818,10 +815,13 @@ void NumericLocaleTest() {
         }
     }
     if (!changed) throw NotRun("no comma-decimal locale is installed here");
+    if (std::localeconv()->decimal_point[0] != ',') {
+        std::setlocale(LC_NUMERIC, previous.c_str());
+        throw NotRun("the locale found does not use a comma decimal");
+    }
     const auto text = RunReport::Serialize(SampleReport());
     std::setlocale(LC_NUMERIC, previous.c_str());
     Require(Contains(text, "\"seconds\": 12.500"), "the numeric locale changed the written number: " + text);
-#endif
 }
 
 

@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <utility>
 #endif
 
@@ -42,6 +43,30 @@ Identity FileIdentity(const std::filesystem::path& path) {
 
 }
 #endif
+
+std::filesystem::path RealPath(const std::filesystem::path& path) {
+#ifdef _WIN32
+    const auto handle = CreateFileW(path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        throw std::filesystem::filesystem_error("Cannot resolve path", path, std::error_code(static_cast<int>(GetLastError()), std::system_category()));
+    std::wstring name(MAX_PATH, L'\0');
+    DWORD size = GetFinalPathNameByHandleW(handle, name.data(), static_cast<DWORD>(name.size()), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    if (size >= name.size()) {
+        name.resize(size);
+        size = GetFinalPathNameByHandleW(handle, name.data(), static_cast<DWORD>(name.size()), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    }
+    const auto error = GetLastError();
+    CloseHandle(handle);
+    if (size == 0 || size >= name.size())
+        throw std::filesystem::filesystem_error("Cannot resolve path", path, std::error_code(static_cast<int>(error), std::system_category()));
+    name.resize(size);
+    if (name.starts_with(L"\\\\?\\UNC\\")) return L"\\\\" + name.substr(8);
+    if (name.starts_with(L"\\\\?\\")) return name.substr(4);
+    return name;
+#else
+    return std::filesystem::canonical(path);
+#endif
+}
 
 bool SameFile(const std::filesystem::path& first, const std::filesystem::path& second) {
 #ifdef _WIN32

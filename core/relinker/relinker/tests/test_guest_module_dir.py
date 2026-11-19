@@ -117,6 +117,14 @@ def check_plugin_host_dependencies(relinker, work):
                     assert run.returncode != 0 and "libPresent.prx" in run.stderr, (run.returncode, run.stderr)
 
 
+def link_directory(link, target):
+    if os.name == "nt":
+        import _winapi
+        _winapi.CreateJunction(str((link.parent / target).resolve()), str(link))
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
 def main():
     relinker = Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory(prefix="anyps5-module-dir-") as directory:
@@ -273,9 +281,8 @@ def main():
                 assert result.returncode == 2 and message in result.stderr, (rejected, result.stderr)
 
             aliases = [["SCE_MODULE"], ["Media/Plugins", "media/plugins"]] if (case / "MEDIA").exists() else []
-            if os.name != "nt":
-                (case / "linked").symlink_to("sce_module", target_is_directory=True)
-                aliases.append(["linked"])
+            link_directory(case / "linked", "sce_module")
+            aliases.append(["linked"])
             for names in aliases:
                 result, output = convert(case, windows, [option for name in names for option in ("--module-dir", name)])
                 assert result.returncode == 2 and "Duplicate guest module directory" in result.stderr, (names, result.stderr)
@@ -328,22 +335,21 @@ def main():
                 assert result.returncode == 2 and "inside the guest module parent directory" in result.stderr, (name, result.stderr)
                 assert not output.exists() and not list(case.rglob("*.guest.prx"))
                 assert (external / "plugin.prx").read_bytes() == original
-            if os.name != "nt":
-                for name in ("linked", "Media/linked"):
-                    link = case / name
-                    link.symlink_to(external, target_is_directory=True)
-                    result, output = convert(case, windows, ["--module-dir", name], cwd=case)
-                    assert result.returncode == 2 and "inside the guest module parent directory" in result.stderr, (name, result.stdout, result.stderr)
-                    assert not output.exists() and not list(case.rglob("*.guest.prx"))
-                    assert (external / "plugin.prx").read_bytes() == original
-                inside = work / f"{windows}-inside-link"
-                modules = inside / "Media" / "Plugins"
-                modules.mkdir(parents=True)
-                (modules / "plugin.prx").write_bytes(original)
-                (inside / "linked").symlink_to(modules, target_is_directory=True)
-                result, output = convert(inside, windows, ["--module-dir", "linked"], standard=False)
-                assert result.returncode == 0, (result.stdout, result.stderr)
-                assert (inside / "app0" / "linked" / "plugin.prx.guest.prx").is_file()
+            for name in ("linked", "Media/linked"):
+                link = case / name
+                link_directory(link, external)
+                result, output = convert(case, windows, ["--module-dir", name], cwd=case)
+                assert result.returncode == 2 and "inside the guest module parent directory" in result.stderr, (name, result.stdout, result.stderr)
+                assert not output.exists() and not list(case.rglob("*.guest.prx"))
+                assert (external / "plugin.prx").read_bytes() == original
+            inside = work / f"{windows}-inside-link"
+            modules = inside / "Media" / "Plugins"
+            modules.mkdir(parents=True)
+            (modules / "plugin.prx").write_bytes(original)
+            link_directory(inside / "linked", modules)
+            result, output = convert(inside, windows, ["--module-dir", "linked"], standard=False)
+            assert result.returncode == 0, (result.stdout, result.stderr)
+            assert (inside / "app0" / "linked" / "plugin.prx.guest.prx").is_file()
     print("Guest module directory option tests passed")
 
 

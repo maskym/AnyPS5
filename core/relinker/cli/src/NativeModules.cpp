@@ -79,7 +79,7 @@ NativeModules ReadModules(const std::filesystem::path& inputPath, const std::fil
     if (hasPrx) directories.push_back(prx);
     const auto automaticDirectories = directories.size();
     std::vector<std::filesystem::path> runtimeDirectories;
-    const auto canonicalRoot = std::filesystem::canonical(root);
+    const auto canonicalRoot = Io::RealPath(root);
     for (const auto& name : moduleDirectories) {
         const auto relative = Io::NativePath(name).lexically_normal();
         if (relative.empty() || relative.has_root_path() || *relative.begin() == "..")
@@ -87,7 +87,7 @@ NativeModules ReadModules(const std::filesystem::path& inputPath, const std::fil
         auto directory = (root / relative).lexically_normal();
         if (!directory.has_filename()) directory = directory.parent_path();
         if (!std::filesystem::is_directory(directory)) throw Domain::RelinkerException("Guest module path is not a directory: " + Io::Utf8Path(directory));
-        const auto actualRelative = std::filesystem::canonical(directory).lexically_relative(canonicalRoot);
+        const auto actualRelative = Io::RealPath(directory).lexically_relative(canonicalRoot);
         if (actualRelative.empty() || *actualRelative.begin() == "..")
             throw Domain::RelinkerException("--module-dir must be a directory inside the guest module parent directory: " + name);
         const auto duplicate = std::find_if(directories.begin(), directories.end(), [&](const auto& existing) { return SameDirectory(existing, directory); });

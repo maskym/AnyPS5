@@ -272,6 +272,27 @@ class BoundsAndLinks(CaptureFixture):
                 self.assertEqual(self.capture_fixture()["state"], "invalid")
                 self.assertEqual(self.capture_fixture(metadata_only=True)["state"], "invalid")
 
+    @unittest.skipUnless(os.name == "nt", "Windows directory junctions")
+    def test_junction_in_directory_path_rejected(self):
+        import _winapi
+        self.write_summary()
+        self.write_trace()
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        leaf = Path(outside.name) / "leaf"
+        _winapi.CreateJunction(str(self.directory), str(leaf))
+        self.addCleanup(os.rmdir, leaf)
+        parent = Path(outside.name) / "parent"
+        _winapi.CreateJunction(str(self.directory.parent), str(parent))
+        self.addCleanup(os.rmdir, parent)
+        for run_dir in (leaf, parent / self.directory.name):
+            for metadata_only in (False, True):
+                with self.subTest(run_dir=str(run_dir), metadata_only=metadata_only):
+                    result = performance_capture.inspect_capture(
+                        run_dir, "frames", (3, 2), "PPSA00001", "01.000.000", metadata_only)
+                    self.assertEqual(result["state"], "invalid")
+                    self.assertEqual(result["reason"], "capture directory cannot contain links or reparse points")
+
 
 class LossEvidence(CaptureFixture):
     def test_loss_distinctions(self):

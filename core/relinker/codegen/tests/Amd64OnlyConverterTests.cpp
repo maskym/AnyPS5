@@ -1744,7 +1744,30 @@ void linuxStackSynthesis() {
 
 }
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(__x86_64__)
+#if LOWERING_EXECUTION_AVAILABLE
+std::uint8_t* mapPages(const std::size_t size, const bool executable, const bool low = false) {
+#if defined(_WIN32)
+    const DWORD protection = executable ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE;
+    if (!low) return static_cast<std::uint8_t*>(VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, protection));
+    for (std::uintptr_t address = 0x10000; address + size <= 0x80000000u; address += 0x10000)
+        if (auto* pages = VirtualAlloc(reinterpret_cast<void*>(address), size, MEM_COMMIT | MEM_RESERVE, protection)) return static_cast<std::uint8_t*>(pages);
+    return nullptr;
+#else
+    const int protection = PROT_READ | PROT_WRITE | (executable ? PROT_EXEC : 0);
+    void* pages = mmap(nullptr, size, protection, MAP_PRIVATE | MAP_ANONYMOUS | (low ? MAP_32BIT : 0), -1, 0);
+    return pages == MAP_FAILED ? nullptr : static_cast<std::uint8_t*>(pages);
+#endif
+}
+
+void unmapPages(void* pages, const std::size_t size) {
+#if defined(_WIN32)
+    (void)size;
+    VirtualFree(pages, 0, MEM_RELEASE);
+#else
+    munmap(pages, size);
+#endif
+}
+
 bool hostExecutes(const Bytes& instruction, const char* skipped) {
     if (LoweringExecution::HostExecutes(instruction)) return true;
     std::cout << "skipped: " << skipped << '\n';
@@ -1821,8 +1844,8 @@ std::array<std::uint64_t, 2> runRegisterFormStub(const Bytes& site, const std::u
         const auto displacement = static_cast<std::int32_t>(ret - (match->ReturnBranchOffset + 5));
         std::memcpy(body.data() + match->ReturnBranchOffset + 1, &displacement, sizeof(displacement));
     }
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the stub");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the stub");
     std::memcpy(code, body.data(), body.size());
     alignas(16) std::uint64_t destinationIn[2] = {destination[0], destination[1]};
     alignas(16) std::uint64_t sourceIn[2] = {source[0], source[1]};
@@ -1849,7 +1872,7 @@ std::array<std::uint64_t, 2> runRegisterFormStub(const Bytes& site, const std::u
         :
         : [scratch] "r"(scratchIn), [spare] "r"(spareIn), [dst] "r"(destinationIn), [ctl] "r"(sourceIn), [code] "r"(code), [out] "r"(out), [scratchOut] "r"(scratchOut), [spareOut] "r"(spareOut)
         : "rax", "rcx", "r12", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "memory", "cc");
-    munmap(code, 4096);
+    unmapPages(code, 4096);
     require(scratchOut[0] == scratchIn[0] && scratchOut[1] == scratchIn[1], "Register form stub clobbered a scratch register");
     require(spareOut[0] == spareIn[0] && spareOut[1] == spareIn[1], "Stub clobbered xmm1");
     return {out[0], out[1]};
@@ -1991,8 +2014,8 @@ StubRun runStubBody(const Codegen::Amd64OnlyMatch& match, const std::uint64_t ra
     const auto displacement = static_cast<std::int32_t>(ret - (match.ReturnBranchOffset + 5));
     std::memcpy(body.data() + match.ReturnBranchOffset + 1, &displacement, sizeof(displacement));
     require(body.size() <= 4096 && data.size() <= 4096, "Stub or its data does not fit in a page");
-    auto* code = static_cast<std::uint8_t*>(mmap(nullptr, 3 * 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-    require(code != MAP_FAILED, "cannot map executable memory for the stub");
+    auto* code = mapPages(3 * 4096, true);
+    require(code != nullptr, "cannot map executable memory for the stub");
     StubRun run{};
     run.SiteAddress = reinterpret_cast<std::uint64_t>(code) + 4096;
     Codegen::ApplyStubRelocations(std::span<std::uint8_t>(body).first(match.ReturnBranchOffset), match.Relocations, run.SiteAddress, reinterpret_cast<std::uint64_t>(code), 0);
@@ -2045,7 +2068,7 @@ StubRun runStubBody(const Codegen::Amd64OnlyMatch& match, const std::uint64_t ra
         : [flags] "=&r"(run.Flags), [raxOut] "=&r"(run.Rax), [rcxOut] "=&r"(run.Rcx)
         : [xmmIn] "r"(xmmIn), [xmmOut] "r"(run.Xmm), [raxIn] "r"(rax), [code] "r"(code)
         : "rax", "rcx", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15", "memory", "cc");
-    munmap(code, 3 * 4096);
+    unmapPages(code, 3 * 4096);
     return run;
 }
 
@@ -2074,8 +2097,8 @@ void clzeroExecution() {
     }
     for (const auto& item : cases) {
         require(item.Match.has_value(), item.Name);
-        auto* buffer = static_cast<std::uint8_t*>(mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | (item.Low ? MAP_32BIT : 0), -1, 0));
-        require(buffer != MAP_FAILED, "cannot map the CLZERO buffer");
+        auto* buffer = mapPages(4096, false, item.Low);
+        require(buffer != nullptr, "cannot map the CLZERO buffer");
         for (const std::size_t offset : {std::size_t{0x80}, std::size_t{0xAD}, std::size_t{0xFF}}) {
             std::memset(buffer, 0xA5, 4096);
             const auto address = reinterpret_cast<std::uint64_t>(buffer + offset);
@@ -2089,7 +2112,7 @@ void clzeroExecution() {
             if (item.Advance == 0)
                 require((run.Flags & 0x8D5) == (0x8D7 & 0x8D5), "CLZERO stub changed RFLAGS");
         }
-        munmap(buffer, 4096);
+        unmapPages(buffer, 4096);
     }
 }
 
@@ -2233,8 +2256,8 @@ void rdpruExecution() {
     body.push_back(0xC3);
     const auto displacement = static_cast<std::int32_t>(ret - (match->ReturnBranchOffset + 5));
     std::memcpy(body.data() + match->ReturnBranchOffset + 1, &displacement, sizeof(displacement));
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the RDPRU stub");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the RDPRU stub");
     std::memcpy(code, body.data(), body.size());
     for (const std::uint32_t selector : {0u, 1u, 2u, 0xFFFFFFFFu}) {
         std::uint64_t raxOut = 0;
@@ -2278,7 +2301,7 @@ void rdpruExecution() {
         else
             require(raxOut == 0 && rdxOut == 0, "RDPRU with an undefined selector did not yield zero");
     }
-    munmap(code, 4096);
+    unmapPages(code, 4096);
 }
 
 void mcommitExecution() {
@@ -2288,8 +2311,8 @@ void mcommitExecution() {
     require(match && match->Lowering == Codegen::Amd64OnlyLowering::InPlace, "MCOMMIT lowering was not produced");
     auto body = match->ReplacementBytes;
     body.push_back(0xC3);
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the MCOMMIT lowering");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the MCOMMIT lowering");
     std::memcpy(code, body.data(), body.size());
     for (const std::uint64_t flagsIn : {std::uint64_t{0x8D6}, std::uint64_t{0x8D7}}) {
         std::uint64_t flagsOut = 0;
@@ -2306,7 +2329,7 @@ void mcommitExecution() {
         require((flagsOut & 1) == 1, "MCOMMIT lowering did not report committed");
         require((flagsOut & 0x8D4) == (flagsIn & 0x8D4), "MCOMMIT lowering changed flags other than CF");
     }
-    munmap(code, 4096);
+    unmapPages(code, 4096);
 }
 
 void wideStoreExecution() {
@@ -2317,13 +2340,13 @@ void wideStoreExecution() {
     require(match && match->Lowering == Codegen::Amd64OnlyLowering::Trampoline, "256-bit store stub was not produced");
     auto body = match->StubBody;
     body[match->ReturnBranchOffset] = 0xC3;
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the stub");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the stub");
     std::memcpy(code, body.data(), body.size());
     alignas(32) std::uint8_t source[32];
     for (std::size_t index = 0; index < sizeof(source); ++index) source[index] = static_cast<std::uint8_t>(index + 1);
-    auto* pages = static_cast<std::uint8_t*>(mmap(nullptr, 8192, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-    require(pages != MAP_FAILED, "cannot map the destination pages");
+    auto* pages = mapPages(8192, false);
+    require(pages != nullptr, "cannot map the destination pages");
     for (const std::size_t offset : {std::size_t{0}, std::size_t{1}, std::size_t{4080}}) {
         std::memset(pages, 0, 8192);
         auto* destination = pages + offset;
@@ -2340,8 +2363,8 @@ void wideStoreExecution() {
         require(std::all_of(destination + sizeof(source), pages + 8192, [](const std::uint8_t value) { return value == 0; }),
                 "256-bit store stub wrote past its operand");
     }
-    munmap(pages, 8192);
-    munmap(code, 4096);
+    unmapPages(pages, 8192);
+    unmapPages(code, 4096);
 }
 
 void xsaveoptExecution() {
@@ -2351,8 +2374,8 @@ void xsaveoptExecution() {
     require(match && match->Lowering == Codegen::Amd64OnlyLowering::InPlace, "XSAVEOPT64 was not rewritten in place");
     auto body = match->ReplacementBytes;
     body.push_back(0xC3);
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the XSAVEOPT replacement");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the XSAVEOPT replacement");
     std::memcpy(code, body.data(), body.size());
     alignas(64) std::uint8_t area[1024] = {};
     alignas(32) std::uint8_t pattern[32];
@@ -2376,7 +2399,7 @@ void xsaveoptExecution() {
         :
         : [pattern] "r"(pattern), [area] "r"(area), [code] "r"(code), [restored] "r"(restored)
         : "rax", "rdx", "rdi", "xmm3", "memory");
-    munmap(code, 4096);
+    unmapPages(code, 4096);
     std::uint64_t components = 0;
     std::memcpy(&components, area + 512, sizeof(components));
     require((components & 6) == 6, "XSAVE did not mark the SSE and AVX state as saved");
@@ -2391,8 +2414,8 @@ void scalarCompareExecution() {
     require(match && match->Lowering == Codegen::Amd64OnlyLowering::Trampoline, "scalar compare stub was not produced");
     auto body = match->StubBody;
     body[match->ReturnBranchOffset] = 0xC3;
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the stub");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the stub");
     std::memcpy(code, body.data(), body.size());
     struct Case {
         float left;
@@ -2420,7 +2443,7 @@ void scalarCompareExecution() {
                     && result[3] == std::bit_cast<std::uint32_t>(3.0f),
                 "scalar compare stub changed the upper lanes of its destination");
     }
-    munmap(code, 4096);
+    unmapPages(code, 4096);
 }
 
 void rdpidExecution() {
@@ -2430,8 +2453,8 @@ void rdpidExecution() {
     require(match && match->Lowering == Codegen::Amd64OnlyLowering::Trampoline, "RDPID stub was not produced");
     auto body = match->StubBody;
     body[match->ReturnBranchOffset] = 0xC3;
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the stub");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the stub");
     std::memcpy(code, body.data(), body.size());
     std::uint64_t processor = ~std::uint64_t{0};
     std::uint8_t carry = 0;
@@ -2444,7 +2467,7 @@ void rdpidExecution() {
         : "=&a"(processor), [carry] "=&q"(carry)
         : [code] "r"(code)
         : "memory", "cc");
-    munmap(code, 4096);
+    unmapPages(code, 4096);
     require(processor == 0, "RDPID stub left a value other than processor 0 in RAX");
     require(carry == 1, "RDPID stub changed the flags");
 }
@@ -2458,8 +2481,8 @@ void rdseedExecution() {
     if (!hostExecutes(match->ReplacementBytes, "RDSEED replacement execution, the host does not execute RDRAND")) return;
     auto body = match->ReplacementBytes;
     body.push_back(0xC3);
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the replacement");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the replacement");
     std::memcpy(code, body.data(), body.size());
     bool produced = false;
     for (unsigned attempt = 0; attempt < 16 && !produced; ++attempt) {
@@ -2475,7 +2498,7 @@ void rdseedExecution() {
             : "memory", "cc");
         produced = carry == 1;
     }
-    munmap(code, 4096);
+    unmapPages(code, 4096);
     require(produced, "RDSEED replacement never reported a random value");
 }
 
@@ -2487,8 +2510,8 @@ void clwbExecution() {
     require(match->ReplacementBytes.size() == site.size(), "CLWB replacement changed the instruction length");
     auto body = match->ReplacementBytes;
     body.push_back(0xC3);
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the replacement");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the replacement");
     std::memcpy(code, body.data(), body.size());
     std::uint8_t line[64] = {};
     std::uint64_t address = reinterpret_cast<std::uint64_t>(line);
@@ -2503,7 +2526,7 @@ void clwbExecution() {
         : "+a"(address), "+b"(kept), [carry] "=&q"(carry)
         : [code] "r"(code)
         : "memory", "cc");
-    munmap(code, 4096);
+    unmapPages(code, 4096);
     require(address == reinterpret_cast<std::uint64_t>(line), "CLWB replacement changed its address register");
     require(kept == 0x5A5A5A5A5A5A5A5Aull, "CLWB replacement changed an unrelated register");
     require(carry == 1, "CLWB replacement changed the flags");
@@ -2521,7 +2544,7 @@ void mcommitExecution() {}
 void xsaveoptExecution() {}
 #endif
 
-#if defined(__x86_64__) && (defined(__linux__) || defined(__APPLE__))
+#if LOWERING_EXECUTION_AVAILABLE
 void rdtscpExecution() {
     const auto matcher = Codegen::MakeAmd64OnlyInstructionMatcher(Codegen::Amd64OnlyTarget::Rosetta);
     const Bytes site = {0x0F, 0x01, 0xF9};
@@ -2529,8 +2552,8 @@ void rdtscpExecution() {
     require(match && match->Lowering == Codegen::Amd64OnlyLowering::Trampoline, "RDTSCP stub was not produced");
     auto body = match->StubBody;
     body[match->ReturnBranchOffset] = 0xC3;
-    void* code = mmap(nullptr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    require(code != MAP_FAILED, "cannot map executable memory for the stub");
+    void* code = mapPages(4096, true);
+    require(code != nullptr, "cannot map executable memory for the stub");
     std::memcpy(code, body.data(), body.size());
     std::uint64_t low = 0;
     std::uint64_t high = 0;
@@ -2546,7 +2569,7 @@ void rdtscpExecution() {
         : "=&a"(low), "=&d"(high), "=&c"(processor), [carry] "=&q"(carry)
         : [code] "r"(code)
         : "memory", "cc");
-    munmap(code, 4096);
+    unmapPages(code, 4096);
     require(((high << 32) | low) != 0, "RDTSCP stub did not read the time stamp counter");
     require(processor == 0, "RDTSCP stub left a value other than processor 0 in RCX");
     require(carry == 1, "RDTSCP stub changed the flags");

@@ -174,7 +174,8 @@ static bool openDevice(Port& port) {
     desired.samples = static_cast<Uint16>(port.samplesNum);
     desired.callback = nullptr;
     SDL_AudioSpec obtained{};
-    port.device = SDL_OpenAudioDevice(selectedOutputDevice(std::getenv("ANYPS5_AUDIO_DEVICE")), 0, &desired, &obtained, 0);
+    const std::string requested = ConfiguredOutputDevice();
+    port.device = SDL_OpenAudioDevice(selectedOutputDevice(requested.c_str()), 0, &desired, &obtained, 0);
     if (port.device == 0) {
         return false;
     }

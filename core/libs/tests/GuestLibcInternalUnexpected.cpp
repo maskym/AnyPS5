@@ -3,11 +3,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <stdexcept>
-#ifndef _WIN32
-#include <sys/types.h>
+#include <string>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <vector>
 #endif
 
 namespace {
@@ -80,30 +87,66 @@ void CheckUnexpectedInvocation() {
     _ZSt14set_unexpectedPFvvE_nid_postfix(nullptr);
 }
 
-#ifndef _WIN32
-void CheckUnexpectedTerminatesOnReturn() {
+std::filesystem::path OwnExecutable() {
+#ifdef _WIN32
+    std::wstring executable(32768, L'\0');
+    executable.resize(GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size())));
+    return executable;
+#elif defined(__APPLE__)
+    std::uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::vector<char> executable(size);
+    Require(_NSGetExecutablePath(executable.data(), &size) == 0, "executable path lookup failed");
+    return std::filesystem::canonical(executable.data());
+#else
+    return std::filesystem::read_symlink("/proc/self/exe");
+#endif
+}
+
+int RunChild(const std::filesystem::path& self, const char* mode) {
+#ifdef _WIN32
+    std::wstring commandLine = L"\"" + self.wstring() + L"\" " + std::wstring(mode, mode + std::strlen(mode));
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    Require(CreateProcessW(self.c_str(), commandLine.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup, &process) != 0, "CreateProcessW failed");
+    WaitForSingleObject(process.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(process.hProcess, &code);
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return static_cast<int>(code);
+#else
     const pid_t child = fork();
     Require(child >= 0, "fork failed");
     if (child == 0) {
-        _ZSt13set_terminatePFvvE_nid_postfix([] { std::_Exit(77); });
-        _ZSt14set_unexpectedPFvvE_nid_postfix([] {});
-        _ZSt10unexpectedv_nid_postfix();
-        std::_Exit(1);
+        execl(self.c_str(), self.c_str(), mode, static_cast<char*>(nullptr));
+        std::_Exit(127);
     }
     int status = 0;
     Require(waitpid(child, &status, 0) == child, "waitpid failed");
-    Require(WIFEXITED(status) && WEXITSTATUS(status) == 77, "returning unexpected handler falls through to terminate");
-}
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 #endif
+}
+
+int RunUnexpectedReturns() {
+    _ZSt13set_terminatePFvvE_nid_postfix([] { std::_Exit(77); });
+    _ZSt14set_unexpectedPFvvE_nid_postfix([] {});
+    _ZSt10unexpectedv_nid_postfix();
+    return 1;
+}
+
+void CheckUnexpectedTerminatesOnReturn() {
+    Require(RunChild(OwnExecutable(), "--unexpected-returns") == 77, "returning unexpected handler falls through to terminate");
+}
 
 }
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc > 1 && std::strcmp(argv[1], "--unexpected-returns") == 0) return RunUnexpectedReturns();
     CheckUnexpectedHandlerLifecycle();
     CheckUnexpectedInvocation();
-#ifndef _WIN32
     CheckUnexpectedTerminatesOnReturn();
-#endif
     std::puts("libc internal unexpected tests passed");
     return 0;
 }

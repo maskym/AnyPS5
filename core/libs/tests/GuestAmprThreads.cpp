@@ -15,12 +15,19 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <thread>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <vector>
 #endif
 
 struct PadTarget {
@@ -47,8 +54,6 @@ struct GuestSystemError {
 struct TestPad : GuestPad {
     PadTarget target;
 };
-
-using GuestTerminate = void (APS5_VABI*)();
 
 extern "C" {
 
@@ -500,46 +505,90 @@ static void* APS5_VABI DestroyPad(void* arg) {
     return nullptr;
 }
 
-#ifndef _WIN32
-static void APS5_VABI ExitWithSystemErrorCode() {
+static void ExitWithSystemErrorCode() {
     const auto* type = __cxa_current_exception_type_nid_postfix();
     const auto* error = static_cast<const GuestSystemError*>(__cxa_current_primary_exception_nid_postfix());
-    _exit(type && error && std::strcmp(type->name(), "St12system_error") == 0 ? error->code : 1);
-}
-
-template <typename TCall>
-static int TerminateExitCode(GuestTerminate handler, TCall call) {
-    const pid_t child = fork();
-    Require(child >= 0);
-    if (child == 0) {
-        _ZSt13set_terminatePFvvE_nid_postfix(handler);
-
-        call();
-        _exit(2);
-    }
-    int status = 0;
-    Require(waitpid(child, &status, 0) == child);
-    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    std::_Exit(type && error && std::strcmp(type->name(), "St12system_error") == 0 ? error->code : 1);
 }
 
 static const GuestTypeInfo UnexpectedType{_ZTVN10__cxxabiv117__class_type_infoE_nid_postfix + 16, "10Unexpected"};
 
-static void APS5_VABI ExitWithCaughtType() {
+static void ExitWithCaughtType() {
     const auto* type = __cxa_current_exception_type_nid_postfix();
-    _exit(type == reinterpret_cast<const std::type_info*>(&UnexpectedType) ? 42 : type == nullptr ? 43 : 1);
+    std::_Exit(type == reinterpret_cast<const std::type_info*>(&UnexpectedType) ? 42 : type == nullptr ? 43 : 1);
+}
+
+static std::filesystem::path OwnExecutable() {
+#ifdef _WIN32
+    std::wstring executable(32768, L'\0');
+    executable.resize(GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size())));
+    return executable;
+#elif defined(__APPLE__)
+    std::uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::vector<char> executable(size);
+    Require(_NSGetExecutablePath(executable.data(), &size) == 0);
+    return std::filesystem::canonical(executable.data());
+#else
+    return std::filesystem::read_symlink("/proc/self/exe");
+#endif
+}
+
+static int RunChild(const std::filesystem::path& self, const char* mode) {
+#ifdef _WIN32
+    std::wstring commandLine = L"\"" + self.wstring() + L"\" " + std::wstring(mode, mode + std::strlen(mode));
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    Require(CreateProcessW(self.c_str(), commandLine.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup, &process) != 0);
+    WaitForSingleObject(process.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(process.hProcess, &code);
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return static_cast<int>(code);
+#else
+    const pid_t child = fork();
+    Require(child >= 0);
+    if (child == 0) {
+        execl(self.c_str(), self.c_str(), mode, static_cast<char*>(nullptr));
+        std::_Exit(127);
+    }
+    int status = 0;
+    Require(waitpid(child, &status, 0) == child);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+#endif
+}
+
+static int CallUnexpectedType() {
+    _ZSt13set_terminatePFvvE_nid_postfix(ExitWithCaughtType);
+    void* object = __cxa_allocate_exception_nid_postfix(sizeof(int));
+    auto* type = reinterpret_cast<std::type_info*>(const_cast<GuestTypeInfo*>(&UnexpectedType));
+    LibcException::Header* header = __cxa_init_primary_exception_nid_postfix(object, type, nullptr);
+    __cxa_call_unexpected_nid_postfix(&header->unwind);
+    return 2;
+}
+
+static int CallUnexpectedNull() {
+    _ZSt13set_terminatePFvvE_nid_postfix(ExitWithCaughtType);
+    __cxa_call_unexpected_nid_postfix(nullptr);
+    return 2;
+}
+
+static int ReleaseBusyPad() {
+    std::atomic<int> order{0};
+    std::atomic<bool> destroyed{true};
+    TestPad pad;
+    ConstructPad(pad, order, destroyed, 0, 0);
+    _ZSt13set_terminatePFvvE_nid_postfix(ExitWithSystemErrorCode);
+    _ZNSt4_Pad8_ReleaseEv_nid_postfix(&pad);
+    return 2;
 }
 
 static void TestCallUnexpected() {
-    Require(TerminateExitCode(ExitWithCaughtType, [] {
-        void* object = __cxa_allocate_exception_nid_postfix(sizeof(int));
-        auto* type = reinterpret_cast<std::type_info*>(const_cast<GuestTypeInfo*>(&UnexpectedType));
-        LibcException::Header* header = __cxa_init_primary_exception_nid_postfix(object, type, nullptr);
-        __cxa_call_unexpected_nid_postfix(&header->unwind);
-
-    }) == 42);
-    Require(TerminateExitCode(ExitWithCaughtType, [] { __cxa_call_unexpected_nid_postfix(nullptr); }) == 43);
+    Require(RunChild(OwnExecutable(), "--call-unexpected-type") == 42);
+    Require(RunChild(OwnExecutable(), "--call-unexpected-null") == 43);
 }
-#endif
 
 static void TestPadErrors() {
     Require(Throws<std::invalid_argument>([] { _ZNSt4_PadC2Ev_nid_postfix(nullptr); }));
@@ -554,9 +603,7 @@ static void TestPadErrors() {
     ConstructPad(pad, order, destroyed, 0, 0);
     Require(Throws<std::invalid_argument>([&] { _ZNSt4_Pad7_LaunchEPP7pthread_nid_postfix(&pad, nullptr); }));
     Require(!pad.started && order.load() == 0);
-#ifndef _WIN32
-    Require(TerminateExitCode(ExitWithSystemErrorCode, [&] { _ZNSt4_Pad8_ReleaseEv_nid_postfix(&pad); }) == GuestEbusy);
-#endif
+    Require(RunChild(OwnExecutable(), "--pad-release-busy") == GuestEbusy);
     Require(!pad.started);
 
     ForeignDestroy context{&pad, false};
@@ -569,7 +616,10 @@ static void TestPadErrors() {
     Require(Throws<std::invalid_argument>([&] { _ZNSt4_PadD2Ev_nid_postfix(&pad); }));
 }
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc > 1 && std::strcmp(argv[1], "--call-unexpected-type") == 0) return CallUnexpectedType();
+    if (argc > 1 && std::strcmp(argv[1], "--call-unexpected-null") == 0) return CallUnexpectedNull();
+    if (argc > 1 && std::strcmp(argv[1], "--pad-release-busy") == 0) return ReleaseBusyPad();
     TestPadLaunch();
     TestPadLaunchMany();
     TestPadConcurrentLaunch();
@@ -579,8 +629,6 @@ int main() {
     TestSpinLock();
     TestWcstombs();
     TestConditionSignal();
-#ifndef _WIN32
     TestCallUnexpected();
-#endif
     return 0;
 }

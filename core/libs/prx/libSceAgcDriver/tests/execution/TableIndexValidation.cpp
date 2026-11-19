@@ -95,7 +95,7 @@ public:
     explicit GuestBlocks(std::size_t bytes) : bytes(bytes) {
 #ifdef _WIN32
         base = static_cast<std::uint8_t*>(GuestArena::GuestArenaAllocate_nid_postfix(bytes, BlockBytes));
-        if (base != nullptr) GuestArena::GuestArenaCommit_nid_postfix(base, bytes, PAGE_READWRITE, bytes);
+        if (base != nullptr) GuestArena::GuestArenaCommit_nid_postfix(base, bytes, PAGE_READWRITE, BlockBytes);
 #else
         void* mapped = mmap(nullptr, bytes + BlockBytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (mapped != MAP_FAILED) {
@@ -362,15 +362,11 @@ void PendingWrite(AgcDriver::VulkanDevice& device) {
 }
 
 void Remap(AgcDriver::VulkanDevice& device) {
-#ifdef _WIN32
-    static_cast<void>(device);
-    std::puts("remap: skipped on Windows");
-#else
     auto& scene = NewScene();
     Build(device, scene);
     Settle(device, scene, "remap");
     auto* block = reinterpret_cast<std::uint8_t*>(scene.Texels(Key));
-#ifndef __APPLE__
+#if !defined(_WIN32) && !defined(__APPLE__)
     void* fresh = mmap(nullptr, BlockBytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     Require(fresh != MAP_FAILED, "remap: cannot map the replacement block");
     Fill(static_cast<float*>(fresh), 0.0f);
@@ -380,6 +376,10 @@ void Remap(AgcDriver::VulkanDevice& device) {
         GuestAllocations::Mutation mutation;
         mutation.Remove(scene.textures.base);
     }
+#ifdef _WIN32
+    GuestArena::GuestArenaReset_nid_postfix(block, BlockBytes);
+    GuestArena::GuestArenaCommit_nid_postfix(block, BlockBytes, PAGE_READWRITE, BlockBytes);
+#else
     GuestWriteWatch::GuestWriteWatchUnregister_nid_postfix(block, BlockBytes);
 #ifdef __APPLE__
     Require(mmap(block, BlockBytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == block, "remap: cannot map the replacement block over the texture");
@@ -388,6 +388,7 @@ void Remap(AgcDriver::VulkanDevice& device) {
     Require(mremap(fresh, BlockBytes, BlockBytes, MREMAP_MAYMOVE | MREMAP_FIXED, block) == block, "remap: cannot move the replacement block over the texture");
 #endif
     GuestWriteWatch::GuestWriteWatchRegister_nid_postfix(block, BlockBytes);
+#endif
     {
         GuestAllocations::Mutation mutation;
         mutation.Add(scene.textures.base, scene.textures.bytes, true, true, true);
@@ -396,7 +397,6 @@ void Remap(AgcDriver::VulkanDevice& device) {
     const auto outcome = Draw(device, scene);
     Require(outcome.accepted == 0.0 && outcome.brightest == 0u, "remap: the draw after a remap of the sampled texture took the O(1) proof or sampled the old mapping (" + outcome.Describe() + ")");
     Settle(device, scene, "remap (after)", 0u);
-#endif
 }
 
 void Compared(AgcDriver::VulkanDevice& device) {

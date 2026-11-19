@@ -23,6 +23,7 @@
 #include "prx/libkernel/Equeue/Equeue.hpp"
 #include "SceTypes.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdarg>
 #include <limits>
@@ -71,10 +72,7 @@ static std::int64_t NativeLseek(int fd, std::int64_t offset, int whence) {
     }
     return ::_lseeki64(fd, offset, whence);
 }
-static int NativeRead(int fd, void* buf, std::size_t n) {
-    if (n > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max())) {
-        throw std::runtime_error("sceKernelRead: nbytes exceeds platform limit");
-    }
+static std::int64_t NativeRead(int fd, void* buf, std::size_t n) {
     if (File::IsDirectoryDescriptor(fd)) {
         errno = EISDIR;
         return -1;
@@ -84,25 +82,26 @@ static int NativeRead(int fd, void* buf, std::size_t n) {
         errno = EBADF;
         return -1;
     }
-    const int result = ::_read(fd, buf, static_cast<unsigned int>(n));
-    if (result < 0 && _doserrno == ERROR_NO_DATA) errno = EAGAIN;
-    return result;
+    const bool whole = ::GetFileType(reinterpret_cast<HANDLE>(::_get_osfhandle(fd))) == FILE_TYPE_DISK;
+    std::int64_t done = 0;
+    do {
+        const auto chunk = std::min<std::size_t>(n - static_cast<std::size_t>(done), std::numeric_limits<int>::max());
+        const int result = ::_read(fd, static_cast<char*>(buf) + done, static_cast<unsigned int>(chunk));
+        if (result < 0) {
+            if (_doserrno == ERROR_NO_DATA) errno = EAGAIN;
+            return done != 0 ? done : -1;
+        }
+        done += result;
+        if (static_cast<std::size_t>(result) < chunk || !whole) break;
+    } while (static_cast<std::size_t>(done) < n);
+    return done;
 }
-static int NativeWrite(int fd, const void* buf, std::size_t n) {
-    if (n > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max())) {
-        throw std::runtime_error("sceKernelWrite: nbytes exceeds platform limit");
-    }
-    const auto positioned = File::LockPositionedTransfer(fd);
-    if (File::HasFixedSizeWrites(fd)) {
-        const auto position = ::_lseeki64(fd, 0, SEEK_CUR);
-        if (position < 0 || !File::LimitSharedMemoryWrite_nid_no_patch(fd, n, position)) return -1;
-        if (n == 0) return 0;
-    }
+static std::int64_t NativeWriteChunk(int fd, const void* buf, std::size_t n) {
     const auto shared = File::WriteSharedMemory_nid_no_patch(fd, buf, n);
-    if (shared != -2) return static_cast<int>(shared);
+    if (shared != -2) return shared;
     if (File::Appends(fd)) {
         const auto appended = File::WriteAtEnd(fd, buf, n);
-        if (appended != -2) return static_cast<int>(appended);
+        if (appended != -2) return appended;
     }
     if (WindowsDescriptorHandle_nid_no_patch(fd) == INVALID_HANDLE_VALUE) {
         errno = EBADF;
@@ -112,6 +111,23 @@ static int NativeWrite(int fd, const void* buf, std::size_t n) {
     if (result < 0 && errno == ENOSPC && _doserrno == 0 && ::GetFileType(reinterpret_cast<HANDLE>(::_get_osfhandle(fd))) == FILE_TYPE_PIPE) errno = EAGAIN;
     if (result < 0 && (_doserrno == ERROR_NO_DATA || _doserrno == ERROR_BROKEN_PIPE) && ::GetFileType(reinterpret_cast<HANDLE>(::_get_osfhandle(fd))) == FILE_TYPE_PIPE) errno = EPIPE;
     return result;
+}
+static std::int64_t NativeWrite(int fd, const void* buf, std::size_t n) {
+    const auto positioned = File::LockPositionedTransfer(fd);
+    if (File::HasFixedSizeWrites(fd)) {
+        const auto position = ::_lseeki64(fd, 0, SEEK_CUR);
+        if (position < 0 || !File::LimitSharedMemoryWrite_nid_no_patch(fd, n, position)) return -1;
+        if (n == 0) return 0;
+    }
+    std::int64_t done = 0;
+    do {
+        const auto chunk = std::min<std::size_t>(n - static_cast<std::size_t>(done), std::numeric_limits<int>::max());
+        const auto result = NativeWriteChunk(fd, static_cast<const char*>(buf) + done, chunk);
+        if (result < 0) return done != 0 ? done : -1;
+        done += result;
+        if (static_cast<std::size_t>(result) < chunk) break;
+    } while (static_cast<std::size_t>(done) < n);
+    return done;
 }
 extern "C" _invalid_parameter_handler _set_thread_local_invalid_parameter_handler(_invalid_parameter_handler);
 static void IgnoreInvalidParameter(const wchar_t*, const wchar_t*, const wchar_t*, unsigned int, std::uintptr_t) {}

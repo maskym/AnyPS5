@@ -17,7 +17,9 @@
 #include <stdexcept>
 #include <string>
 #ifdef _WIN32
+#include <fcntl.h>
 #include <io.h>
+#include <windows.h>
 #else
 #include <fcntl.h>
 #include <unistd.h>
@@ -130,15 +132,29 @@ int main() {
     RequirePosixFailure([&] { return pread_nid_postfix(-1, nullptr, 0, 0); }, EBADF);
     RequirePosixFailure([&] { return pwrite_nid_disambig1_nid_postfix(-1, nullptr, 0, 0); }, EBADF);
 #ifdef _WIN32
-    errno = EACCES;
-    bool limitDiagnosticPreserved = false;
-    try {
-        write_nid_postfix(descriptor, payload, static_cast<std::int64_t>(std::numeric_limits<unsigned int>::max()) + 1);
-
-    } catch (const std::runtime_error& error) {
-        limitDiagnosticPreserved = std::string(error.what()).find("nbytes exceeds platform limit") != std::string::npos;
-    }
-    Require(limitDiagnosticPreserved && errno == EACCES);
+    const auto sixFile = root / "six.bin";
+    { std::ofstream stream(sixFile, std::ios::binary); stream << "sixsix"; }
+    const auto sixName = sixFile.string();
+    const int six = open_nid_postfix(sixName.c_str(), SCE_KERNEL_O_RDONLY, 0);
+    Require(six >= 0);
+    char* big = static_cast<char*>(VirtualAlloc(nullptr, 0x80000001, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+    Require(big != nullptr);
+    Require(sceKernelRead(six, big, 0x80000000ull) == 6 && std::memcmp(big, "sixsix", 6) == 0);
+    Require(lseek_nid_postfix(six, 0, SEEK_SET) == 0);
+    std::memset(big, 0, 6);
+    Require(read_nid_postfix(six, big, 0x80000000ull) == 6 && std::memcmp(big, "sixsix", 6) == 0);
+    Require(lseek_nid_postfix(six, 0, SEEK_SET) == 0);
+    std::memset(big, 0, 6);
+    Require(read_nid_postfix(six, big, 0x100000001ull) == 6 && std::memcmp(big, "sixsix", 6) == 0);
+    Require(sceKernelRead(six, big, 0x80000000ull) == 0);
+    const int nul = ::_open("NUL", _O_WRONLY | _O_BINARY);
+    Require(nul >= 0);
+    Require(sceKernelWrite(nul, big, 0x80000000ull) == 0x80000000ll);
+    Require(write_nid_postfix(nul, big, 0x80000001ll) == 0x80000001ll);
+    Require(::_close(nul) == 0);
+    Require(VirtualFree(big, 0, MEM_RELEASE) != 0);
+    Require(close_nid_postfix(six) == 0);
+    Require(std::filesystem::remove(sixFile));
 #endif
     char direct[1]{};
     Require(sceKernelRead(-1, direct, 1) == static_cast<std::int32_t>(0x80020009u));

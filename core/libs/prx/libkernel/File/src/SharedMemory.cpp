@@ -911,7 +911,7 @@ std::int64_t WriteSharedMemory_nid_no_patch(int descriptor, const void* buffer, 
     if (position >= status.st_size) return 0;
     const auto count = std::min<std::uint64_t>(size, static_cast<std::uint64_t>(status.st_size - position));
 #ifdef _WIN32
-    const auto result = ::_write(fd, buffer, static_cast<unsigned int>(std::min<std::uint64_t>(count, std::numeric_limits<unsigned int>::max())));
+    const auto result = ::_write(fd, buffer, static_cast<unsigned int>(std::min<std::uint64_t>(count, std::numeric_limits<int>::max())));
 #else
     const auto result = ::write(fd, buffer, static_cast<std::size_t>(count));
 #endif

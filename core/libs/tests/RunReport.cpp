@@ -1399,16 +1399,47 @@ void Dump(const fs::path& directory) {
     fs::copy_file(collector.ReportPath(), directory / "collector-clean.json", fs::copy_options::overwrite_existing);
 }
 
-#ifndef _WIN32
+#ifdef _WIN32
+std::string Quoted(const fs::path& path) {
+    return "\"" + path.string() + "\"";
+}
+
+int RunChild(const fs::path& executable, const fs::path& directory, const std::string& mode, const std::string& arguments = "", const std::string& environment = "APS5_REPORT=1") {
+    const auto variable = environment.starts_with("unset ") ? std::string("set \"APS5_REPORT=\"") : "set \"" + environment + "\"";
+    const auto command = "\"cd /d " + Quoted(directory) + " && " + variable + " && " + Quoted(executable) + " --child " + mode + " " + arguments + " 2>NUL\"";
+    return std::system(command.c_str());
+}
+
+bool ExitedWith(int status, int code) {
+    return status == code;
+}
+
+bool Aborted(int status) {
+    return static_cast<unsigned>(status) == 0xC0000409u;
+}
+#else
+std::string Quoted(const fs::path& path) {
+    return "'" + path.string() + "'";
+}
+
 int RunChild(const fs::path& executable, const fs::path& directory, const std::string& mode, const std::string& arguments = "", const std::string& environment = "APS5_REPORT=1") {
     const auto command = "cd '" + directory.string() + "' && " + environment + " exec '" + executable.string() + "' --child " + mode + " " + arguments + " 2>/dev/null";
     return std::system(command.c_str());
 }
 
+bool ExitedWith(int status, int code) {
+    return WIFEXITED(status) && WEXITSTATUS(status) == code;
+}
+
+bool Aborted(int status) {
+    return (WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT) || ExitedWith(status, 128 + SIGABRT);
+}
+#endif
+
 fs::path Self;
 
 fs::path CopySelf(const Directory& directory) {
-    const auto copy = directory.path / "game";
+    const auto copy = directory.path / ("game" + Self.extension().string());
     fs::copy_file(Self, copy);
     return copy;
 }
@@ -1428,7 +1459,7 @@ void ChildFlagTest() {
     Directory directory;
     const auto copy = CopySelf(directory);
     const int status = RunChild(copy, directory.path, "exit", "--aps5-report=off", "APS5_REPORT=1");
-    Require(WIFEXITED(status) && WEXITSTATUS(status) == 7, "the run with --aps5-report=off did not exit with its own status");
+    Require(ExitedWith(status, 7), "the run with --aps5-report=off did not exit with its own status");
     Require(!fs::exists(directory.path / "anyps5-report.json"), "--aps5-report=off still wrote a report");
     RunChild(copy, directory.path, "exit", "--aps5-report=on", "APS5_REPORT=0");
     Require(fs::exists(directory.path / "anyps5-report.json"), "--aps5-report=on did not write a report");
@@ -1437,7 +1468,7 @@ void ChildFlagTest() {
 void ChildMissingFunctionTest() {
     Directory directory;
     const int status = RunChild(CopySelf(directory), directory.path, "caught-missing-function");
-    Require(WIFEXITED(status) && WEXITSTATUS(status) == 0, "the run that caught an unimplemented function did not exit normally");
+    Require(ExitedWith(status, 0), "the run that caught an unimplemented function did not exit normally");
     const auto text = Report(directory);
     for (const char* part : {"\"kind\": \"none\"", "\"exit\": \"clean\"", "\"name\": \"sceNpCaught\"", "\"calls\": 1", "\"missing\": true"}) {
         Require(Contains(text, part), std::string("the report of the caught missing function lacks ") + part + ": " + text);
@@ -1447,7 +1478,7 @@ void ChildMissingFunctionTest() {
 void ChildUncaughtMissingFunctionTest() {
     Directory directory;
     const int status = RunChild(CopySelf(directory), directory.path, "uncaught-missing-function");
-    Require((WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT) || (WIFEXITED(status) && WEXITSTATUS(status) == 128 + SIGABRT), "the run that left an unimplemented function uncaught did not end through abort");
+    Require(Aborted(status), "the run that left an unimplemented function uncaught did not end through abort");
     const auto text = Report(directory);
     for (const char* part : {"\"exit\": \"abort\"", "\"reason\": \"runtime-stop\"", "\"kind\": \"missing-function\"", "\"message\": \"Called sceNpUncaught, which is not implemented.\"", "\"name\": \"sceNpUncaught\"", "\"calls\": 1"}) {
         Require(Contains(text, part), std::string("the report of the run that ended in std::terminate lacks ") + part + ": " + text);
@@ -1457,7 +1488,7 @@ void ChildUncaughtMissingFunctionTest() {
 void ChildTerminateHandlerExitTest() {
     Directory directory;
     const int status = RunChild(CopySelf(directory), directory.path, "terminate-handler-exits");
-    Require(WIFEXITED(status) && WEXITSTATUS(status) == 3, "the run whose own terminate handler exits with 3 did not exit with 3");
+    Require(ExitedWith(status, 3), "the run whose own terminate handler exits with 3 did not exit with 3");
     const auto text = Report(directory);
     for (const char* part : {"\"exit\": \"clean\"", "\"exitCode\": 3", "\"reason\": \"guest-exit\""}) {
         Require(Contains(text, part), std::string("the report of the run whose terminate handler exits lacks ") + part + ": " + text);
@@ -1491,7 +1522,7 @@ void ChildGpuTest() {
 void GuestRootIsNotFixedAtLoadTest() {
     Directory directory;
     const auto output = directory.path / "resolved.txt";
-    RunChild(CopySelf(directory), directory.path, "guest-root", "'" + output.string() + "'", "unset APS5_REPORT &&");
+    RunChild(CopySelf(directory), directory.path, "guest-root", Quoted(output), "unset APS5_REPORT &&");
     const auto resolved = Read(output);
     Require(!resolved.empty(), "the child did not resolve a path");
     Require(SamePath(fs::path(resolved).parent_path(), directory.path / "later"), "the guest root was fixed when the library loaded, not at the first path lookup: " + resolved);
@@ -1505,9 +1536,6 @@ void LibraryFromSourceTest() {
     Require(!Contains(text, "libB") && !Contains(text, "/home/x"), "a deeper prx/ folder or a host path got into the report: " + text);
 }
 
-
-#endif
-
 }
 
 int main(int argc, char** argv) {
@@ -1516,7 +1544,6 @@ int main(int argc, char** argv) {
             Dump(argv[2]);
             return 0;
         }
-#ifndef _WIN32
         const std::string first = argc > 1 ? argv[1] : "";
         if (first == "--child" && argc > 2) {
             const std::string mode = argv[2];
@@ -1562,16 +1589,24 @@ int main(int argc, char** argv) {
                 return 0;
             }
             if (mode == "uncaught-missing-function") {
+#ifndef _WIN32
                 pthread_t thread;
                 pthread_create(&thread, nullptr, [](void*) -> void* { NotImplemented_nid_no_patch("sceNpUncaught"); return nullptr; }, nullptr);
                 pthread_join(thread, nullptr);
+#else
+                std::thread([] { NotImplemented_nid_no_patch("sceNpUncaught"); }).join();
+#endif
                 return 0;
             }
             if (mode == "terminate-handler-exits") {
                 _ZSt13set_terminatePFvvE_nid_postfix([] { LibcExit_nid_no_patch(3); });
+#ifndef _WIN32
                 pthread_t thread;
                 pthread_create(&thread, nullptr, [](void*) -> void* { NotImplemented_nid_no_patch("sceNpHandled"); return nullptr; }, nullptr);
                 pthread_join(thread, nullptr);
+#else
+                std::thread([] { NotImplemented_nid_no_patch("sceNpHandled"); }).join();
+#endif
                 return 0;
             }
             if (mode == "caught-missing-function") {
@@ -1579,11 +1614,12 @@ int main(int argc, char** argv) {
                 LibcRunReportFinishExit_nid_no_patch(0);
                 return 0;
             }
+#ifndef _WIN32
             std::raise(SIGKILL);
+#endif
             return 3;
         }
         Self = fs::absolute(argv[0]);
-#endif
         Run("toggle", ToggleTests);
         Run("privacy", PrivacyTests);
         Run("serialize", SerializeTests);
@@ -1644,7 +1680,6 @@ int main(int argc, char** argv) {
         Run("recipe-environment", RecipeEnvironmentTest);
         Run("recipe-serialize", RecipeSerializeTest);
         Run("recipe-file", RecipeFileTest);
-#ifndef _WIN32
         Run("child-exit", ChildExitTest);
         Run("child-flag", ChildFlagTest);
         Run("child-library-from-source", LibraryFromSourceTest);
@@ -1654,7 +1689,6 @@ int main(int argc, char** argv) {
         Run("child-missing-function", ChildMissingFunctionTest);
         Run("child-uncaught-missing-function", ChildUncaughtMissingFunctionTest);
         Run("child-terminate-handler-exits", ChildTerminateHandlerExitTest);
-#endif
         std::printf("run report tests: %d passed, %d failed, %d not run\n", passed, failed, notRun);
         if (passed + failed + notRun == 0) {
             std::fputs("no test ran\n", stderr);

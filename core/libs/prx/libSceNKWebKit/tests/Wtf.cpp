@@ -736,6 +736,7 @@ static void TestMappedFiles() {
     const auto destroy = &_ZN3WTF14FileSystemImpl14MappedFileDataD1Ev;
     const auto destroyBase = &_ZN3WTF14FileSystemImpl14MappedFileDataD2Ev;
     const auto map = &_ZN3WTF14FileSystemImpl14MappedFileData13mapFileHandleEiNS0_12FileOpenModeENS0_14MappedFileModeE;
+    const auto truncate = &_ZN3WTF14FileSystemImpl12truncateFileEix;
     WTF::MappedFileData mapped{};
     bool success = true;
     readOnly(&mapped, -1, 0, success);
@@ -791,13 +792,13 @@ static void TestMappedFiles() {
     Require(mapped.size == 6 && std::memcmp(mapped.data, "SWcdef", 6) == 0);
     destroy(&mapped);
     close(handle);
-#ifndef _WIN32
-    std::filesystem::resize_file(root / "file.bin", std::uint64_t{1} << 32);
+    handle = open(path, 2, true, false);
+    Require(truncate(handle, 1LL << 32));
+    close(handle);
     handle = open(path, 0, true, false);
     readOnly(&mapped, handle, 0, success);
     Require(!success && !mapped.data && !mapped.size);
     close(handle);
-#endif
     RemovePathAlias_nid_no_patch("/nkwebkit-mapped");
     std::filesystem::remove_all(root);
 }

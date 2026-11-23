@@ -7,6 +7,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 namespace {
 
@@ -87,11 +91,22 @@ void WriteFailure() {
     Require(stream.Close() == 0, "close original stream");
 }
 
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
+std::FILE* OpenFailingWriteStream() {
+#ifdef _WIN32
+    int descriptors[2];
+    Require(_pipe(descriptors, 4096, _O_BINARY) == 0, "create pipe");
+    Require(_close(descriptors[0]) == 0, "close pipe read end");
+    return _fdopen(descriptors[1], "wb");
+#else
+    return std::fopen("/dev/full", "wb");
+#endif
+}
+
 void BufferedFailures() {
     for (bool flushFirst : {false, true}) {
-        auto* native = std::fopen("/dev/full", "wb");
-        Require(native != nullptr, "open full device");
+        auto* native = OpenFailingWriteStream();
+        Require(native != nullptr, "open failing write stream");
         Require(std::setvbuf(native, nullptr, _IOFBF, 4096) == 0, "enable buffering");
         FileStream stream(native);
         WebRtcFileWrapper wrapper{&stream};
@@ -115,7 +130,7 @@ int main() {
     RoundTrip();
     Ownership();
     WriteFailure();
-#ifdef __linux__
+#if defined(__linux__) || defined(_WIN32)
     BufferedFailures();
 #endif
     WebRtcFileWrapper empty{};

@@ -1,6 +1,7 @@
 #pragma once
 #include "prx/libSceNKWebKit/include/BidiContextExports.hpp"
 #include "prx/libSceNKWebKit/include/CrossThreadTaskHandlerExports.hpp"
+#include "prx/libSceNKWebKit/include/DeviceMotionDataExports.hpp"
 #include "prx/libSceNKWebKit/include/DOMCacheEngineExports.hpp"
 #include "prx/libSceNKWebKit/include/DoViCodecParameters.hpp"
 #include "prx/libSceNKWebKit/include/HitTestLocationExports.hpp"
@@ -33,6 +34,7 @@
 #include "prx/libSceNKWebKit/include/ScrollbarValueExports.hpp"
 #include "prx/libSceNKWebKit/include/SessionCookieExports.hpp"
 #include "prx/libSceNKWebKit/include/ContentTypeExports.hpp"
+#include "prx/libSceNKWebKit/include/PasteboardExports.hpp"
 #include "prx/libSceNKWebKit/include/CursorExports.hpp"
 #include "prx/libSceNKWebKit/include/ProcessWarmingExports.hpp"
 #include "prx/libSceNKWebKit/include/JscDumpExports.hpp"
@@ -85,6 +87,7 @@
 #include "prx/libSceNKWebKit/include/WtfThreadingExports.hpp"
 #include "prx/libSceNKWebKit/include/SerializedCryptoKeyWrapExports.hpp"
 #include "prx/libSceNKWebKit/include/SettingsBaseDefaultsExports.hpp"
+#include "prx/libSceNKWebKit/include/SettingsBaseExports.hpp"
 #include "prx/libSceNKWebKit/include/WebCoreProcessSwitchesExports.hpp"
 #include "prx/libSceNKWebKit/include/WtfConcurrentPtrHashSet.hpp"
 #include "prx/libSceNKWebKit/include/ArgumentReturnExports.hpp"
